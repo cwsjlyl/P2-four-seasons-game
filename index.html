@@ -3,81 +3,183 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="description" content="專為香港小學二年級學生設計的 iPad Switch 級別 3D 四季科學探索遊戲，具備高山河流小橋地形、即時雷達小地圖、動態天氣轉變與廣東話語音問答。">
+    <meta name="description" content="專為香港小學二年級學生設計的 iPad 3D 四季科學探索遊戲，結合香港特色動植物互動、寶可夢風格四季大獎章與動態天氣換裝。">
     <meta name="theme-color" content="#0EA5E9">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="四季小探險家">
-    <title>四季小探險家 3D — 香港小二科學山河與動態天氣世界</title>
+    <title>四季小探險家 3D — 香港生態與四季大獎章之旅</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-    <!-- 3D 遊戲畫布 -->
     <canvas id="game-canvas"></canvas>
-
-    <!-- 狂風暴雨閃電視覺閃光層 -->
     <div id="lightning-flash"></div>
 
-    <!-- 開場歡迎畫面（解鎖 iPad WebAudio 與廣東話 TTS 語音） -->
+    <!-- 開場歡迎畫面 -->
     <div id="start-overlay">
         <div class="hero-box">
-            <div class="season-icons-row">🌸🏖️🍁⛄</div>
+            <div class="season-icons-row">🌺🐢🦩🦔</div>
             <h1 class="hero-title">四季小探險家 3D</h1>
             <p class="hero-desc">
-                走進有<strong>高山、清澈河流與木拱橋</strong>的香港小二四季科學島！<br>
-                留意<strong>動態天氣變化</strong>（晴天、驟雨、狂風暴雨、濃霧、結霜），<br>
-                回答問題換上合適衣著與手提物品，收集寶石贏取證書！
+                攀登四季高山、跨越木拱橋探索香港大自然！<br>
+                1️⃣ 完成每區 <strong>2 個任務台</strong> 收集小徽章<br>
+                2️⃣ 跟隨<strong>金色箭嘴</strong>尋找<strong>香港特色動植物</strong>互動，贏取<strong>四季寶可夢級大獎章</strong>！
             </p>
             <div class="feature-badges">
-                <span class="mini-badge">🗺️ 右上即時虛擬地圖</span>
-                <span class="mini-badge">⛈️ 動態天氣換裝問答</span>
+                <span class="mini-badge">🏅 集齊 4 枚特色大獎章過關</span>
+                <span class="mini-badge">🦩 香港動植物互動</span>
+                <span class="mini-badge">🏔️ 可攀登四季高山</span>
                 <span class="mini-badge">🔊 廣東話讀題及選項</span>
-                <span class="mini-badge">🌉 高山河流拱橋物理</span>
             </div>
-            <button class="primary-cta-btn" id="start-game-btn" style="font-size: 1.38rem; padding: 15px 44px;">
-                🚀 開始探索四季島！
+            <button class="primary-cta-btn" id="start-game-btn" style="font-size: 1.32rem; padding: 14px 40px;">
+                🚀 出發收集四季大獎章！
             </button>
         </div>
     </div>
 
-    <!-- 遊戲 HUD 覆蓋層 -->
+    <!-- 遊戲 HUD 覆蓋層（精簡緊湊設計，保留最大廣角遊戲畫面） -->
     <div id="ui-layer">
         <div class="hud-top">
-            <!-- 左上狀態與快捷控制區 -->
+            <!-- 左上狀態區 -->
             <div class="hud-left-col">
                 <div class="hud-row">
                     <div class="glass-pill" id="season-badge">🏛️ 中央科學廣場</div>
                     <div class="glass-pill" id="weather-badge">🌤️ 舒適微風</div>
-                    <div class="glass-pill" id="score-badge">🏅 獎章：<span id="score-val">0</span> / 10</div>
                 </div>
                 <div class="hud-row">
                     <div class="glass-pill dark-pill" id="phys-badge">📐 海拔 0.3m｜石磚廣場</div>
-                    <div class="glass-pill outfit-pill" id="outfit-badge">👕 鮮紅探索外套＋🔍放大鏡</div>
+                    <div class="glass-pill outfit-pill" id="outfit-badge">🧥 深藍探索裝＋🔍放大鏡</div>
                 </div>
                 <div class="hud-row">
                     <div class="stamina-wrap">
-                        <span>⚡ 體力</span>
+                        <span>⚡</span>
                         <div class="stamina-bar-bg"><div id="stamina-fill"></div></div>
                     </div>
-                    <button class="glass-pill btn-pill mini-btn" id="sim-weather-btn" title="立即體驗當前園區下一個天氣">🌦️ 轉換天氣</button>
+                    <button class="glass-pill btn-pill mini-btn" id="zoom-btn">🔭 遠景</button>
+                    <button class="glass-pill btn-pill mini-btn" id="sim-weather-btn">🌦️ 轉天氣</button>
                     <button class="glass-pill btn-pill mini-btn" id="wardrobe-btn">🎨 換色</button>
-                    <button class="glass-pill btn-pill mini-btn" id="quality-btn">✨ 高畫質</button>
-                    <button class="glass-pill btn-pill mini-btn" id="sound-btn">🔊 音效</button>
+                    <button class="glass-pill btn-pill mini-btn" id="quality-btn">✨ 畫質</button>
+                    <button class="glass-pill btn-pill mini-btn" id="sound-btn">🔊</button>
                     <button class="glass-pill btn-pill mini-btn" id="cert-open-btn" style="display:none; background:#FEF08A; border-color:#FACC15; color:#854D0E;">🎓 證書</button>
                 </div>
             </div>
 
-            <!-- 右上半透明虛擬雷達地圖（顯示建築物、任務點、小猴子、河流、小橋與高山） -->
+            <!-- 畫面中央上方：寶可夢道館風格「四季大獎章盒」 -->
+            <div id="badge-case-bar" aria-label="四季大獎章收集盒">
+                <div class="badge-case-title">✨ 四季生態大獎章 ✨</div>
+                <div class="badge-slots-row">
+                    <!-- 春：紫荊花露徽章 -->
+                    <div class="poke-badge-slot" id="slot-spring">
+                        <div class="badge-svg-wrap">
+                            <svg viewBox="0 0 64 64" class="poke-svg">
+                                <defs>
+                                    <linearGradient id="g-spr" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stop-color="#F472B6"/>
+                                        <stop offset="55%" stop-color="#DB2777"/>
+                                        <stop offset="100%" stop-color="#831843"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="32,3 57,18 57,46 32,61 7,46 7,18" fill="#1E293B" stroke="#FACC15" stroke-width="3"/>
+                                <g fill="url(#g-spr)" stroke="#FDE047" stroke-width="1.8">
+                                    <ellipse cx="32" cy="17" rx="7" ry="12"/>
+                                    <ellipse cx="46" cy="27" rx="7" ry="12" transform="rotate(72 46 27)"/>
+                                    <ellipse cx="41" cy="44" rx="7" ry="12" transform="rotate(144 41 44)"/>
+                                    <ellipse cx="23" cy="44" rx="7" ry="12" transform="rotate(216 23 44)"/>
+                                    <ellipse cx="18" cy="27" rx="7" ry="12" transform="rotate(288 18 27)"/>
+                                </g>
+                                <circle cx="32" cy="32" r="7" fill="#FEF08A" stroke="#CA8A04" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div class="sub-pips">
+                            <span class="pip" id="pip-spring-0"></span>
+                            <span class="pip" id="pip-spring-1"></span>
+                        </div>
+                        <span class="badge-lbl">春・紫荊</span>
+                    </div>
+
+                    <!-- 夏：碧浪海龜徽章 -->
+                    <div class="poke-badge-slot" id="slot-summer">
+                        <div class="badge-svg-wrap">
+                            <svg viewBox="0 0 64 64" class="poke-svg">
+                                <defs>
+                                    <linearGradient id="g-sum" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stop-color="#38BDF8"/>
+                                        <stop offset="50%" stop-color="#0284C7"/>
+                                        <stop offset="100%" stop-color="#065F46"/>
+                                    </linearGradient>
+                                </defs>
+                                <circle cx="32" cy="32" r="27" fill="#0F172A" stroke="#38BDF8" stroke-width="3"/>
+                                <polygon points="32,9 51,21 51,43 32,55 13,43 13,21" fill="url(#g-sum)" stroke="#FACC15" stroke-width="2.4"/>
+                                <polygon points="32,18 43,25 43,39 32,46 21,39 21,25" fill="#10B981" stroke="#FEF08A" stroke-width="1.8"/>
+                                <circle cx="32" cy="32" r="5.5" fill="#FEF08A"/>
+                            </svg>
+                        </div>
+                        <div class="sub-pips">
+                            <span class="pip" id="pip-summer-0"></span>
+                            <span class="pip" id="pip-summer-1"></span>
+                        </div>
+                        <span class="badge-lbl">夏・綠龜</span>
+                    </div>
+
+                    <!-- 秋：金楓琵鷺徽章 -->
+                    <div class="poke-badge-slot" id="slot-autumn">
+                        <div class="badge-svg-wrap">
+                            <svg viewBox="0 0 64 64" class="poke-svg">
+                                <defs>
+                                    <linearGradient id="g-aut" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stop-color="#FDE047"/>
+                                        <stop offset="50%" stop-color="#F97316"/>
+                                        <stop offset="100%" stop-color="#991B1B"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="32,4 58,32 32,60 6,32" fill="#1E293B" stroke="#FB923C" stroke-width="3"/>
+                                <path d="M32,10 L38,24 L52,22 L42,34 L48,48 L32,41 L16,48 L22,34 L12,22 L26,24 Z" fill="url(#g-aut)" stroke="#FEF08A" stroke-width="2"/>
+                                <circle cx="32" cy="31" r="5" fill="#FFFFFF"/>
+                            </svg>
+                        </div>
+                        <div class="sub-pips">
+                            <span class="pip" id="pip-autumn-0"></span>
+                            <span class="pip" id="pip-autumn-1"></span>
+                        </div>
+                        <span class="badge-lbl">秋・琵鷺</span>
+                    </div>
+
+                    <!-- 冬：霜晶穿山甲徽章 -->
+                    <div class="poke-badge-slot" id="slot-winter">
+                        <div class="badge-svg-wrap">
+                            <svg viewBox="0 0 64 64" class="poke-svg">
+                                <defs>
+                                    <linearGradient id="g-win" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0%" stop-color="#E0F2FE"/>
+                                        <stop offset="50%" stop-color="#6366F1"/>
+                                        <stop offset="100%" stop-color="#312E81"/>
+                                    </linearGradient>
+                                </defs>
+                                <polygon points="32,4 54,14 60,36 44,57 20,57 4,36 10,14" fill="#0F172A" stroke="#A5B4FC" stroke-width="3"/>
+                                <polygon points="32,8 40,24 56,32 40,40 32,56 24,40 8,32 24,24" fill="url(#g-win)" stroke="#FFFFFF" stroke-width="2"/>
+                                <polygon points="32,21 41,32 32,43 23,32" fill="#FEF08A"/>
+                            </svg>
+                        </div>
+                        <div class="sub-pips">
+                            <span class="pip" id="pip-winter-0"></span>
+                            <span class="pip" id="pip-winter-1"></span>
+                        </div>
+                        <span class="badge-lbl">冬・穿山甲</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右上半透明虛擬雷達地圖 -->
             <div id="minimap-panel">
                 <div class="minimap-header">
-                    <span>🧭 四季島地圖</span>
+                    <span>🧭 地圖</span>
                     <span id="minimap-zone-short">中央區</span>
                 </div>
                 <div class="minimap-canvas-wrap">
-                    <canvas id="minimap-canvas" width="320" height="320"></canvas>
+                    <canvas id="minimap-canvas" width="300" height="300"></canvas>
                     <span class="compass-lbl n">北</span>
                     <span class="compass-lbl s">南</span>
                     <span class="compass-lbl w">西</span>
@@ -86,47 +188,46 @@
                 <div class="minimap-legend">
                     <span><i class="dot bld"></i>建築</span>
                     <span><i class="dot gem"></i>任務</span>
-                    <span><i class="dot mnk"></i>猴子</span>
-                    <span><i class="dot brg"></i>小橋</span>
+                    <span><i class="dot eco"></i>生態</span>
+                    <span><i class="dot mnk"></i>猴</span>
                 </div>
             </div>
         </div>
 
-        <!-- 天氣轉變動態提醒橫幅 -->
+        <!-- 任務指引與香港動植物生態發現提示橫幅 -->
         <div id="weather-toast" aria-live="polite">
-            <div class="toast-icon" id="weather-toast-icon">⛈️</div>
+            <div class="toast-icon" id="weather-toast-icon">🌺</div>
             <div class="toast-body">
-                <div class="toast-title" id="weather-toast-title">天氣轉變提醒！</div>
-                <div class="toast-desc" id="weather-toast-desc">正在載入天氣資訊...</div>
+                <div class="toast-title" id="weather-toast-title">生態與天氣提示</div>
+                <div class="toast-desc" id="weather-toast-desc">提示載入中...</div>
             </div>
         </div>
 
-        <div id="mission-banner">👉 左下搖桿移動、過小橋跨河流！留意天氣變化換衣著，收集寶石或追小猴子答題！</div>
+        <div id="mission-banner">🎯 目標：完成各季 2 個任務台（①、②），再跟金色箭嘴找香港特色動植物贏取 4 枚大獎章！</div>
 
-        <!-- 底部 iPad 雙手觸控區 -->
+        <!-- 底部緊湊雙手觸控區 -->
         <div class="controls-bottom">
             <div id="joystick-zone">
                 <div id="joystick-knob"></div>
             </div>
             <div class="action-buttons">
                 <button class="round-action-btn" id="sprint-btn">
-                    <span style="font-size:1.35rem;">⚡</span>
+                    <span style="font-size:1.2rem;">⚡</span>
                     <span>衝刺</span>
                 </button>
                 <button class="round-action-btn" id="jump-btn">
-                    <span style="font-size:1.5rem;">🦘</span>
+                    <span style="font-size:1.35rem;">🦘</span>
                     <span>跳躍</span>
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- 問答互動視窗（支援寶石題、小猴子題及「天氣轉變衣著與手提物品」必答題） -->
+    <!-- 問答與生態互動視窗 -->
     <div class="modal-backdrop" id="quiz-modal">
         <div class="modal-card" id="quiz-card">
-            <div class="season-tag" id="q-season-tag">🌸 春季挑戰</div>
+            <div class="season-tag" id="q-season-tag">🌸 春季任務</div>
 
-            <!-- 廣東話語音控制列 -->
             <div class="tts-toolbar">
                 <button class="tts-ctrl-btn primary-tts" id="speak-all-btn" type="button">
                     🔊 讀出問題及全部選項
@@ -143,66 +244,64 @@
             </div>
 
             <div class="question-title" id="q-text">問題載入中...</div>
-
             <div class="options-list" id="q-options"></div>
 
-            <!-- 科學／天氣小課堂回饋盒 -->
             <div id="quiz-feedback-box">
-                <div id="feedback-title">🎉 答啱喇！好叻呀！</div>
+                <div id="feedback-title">🎉 答啱喇！</div>
                 <div id="feedback-exp"></div>
             </div>
 
             <div style="display:flex; justify-content:center; gap:12px; margin-top:12px; flex-wrap:wrap;">
                 <button class="primary-cta-btn" id="quiz-next-btn" style="display:none; margin-top:0;">
-                    🎉 換上新裝備，繼續探索！
+                    🎉 繼續探索！
                 </button>
                 <button class="secondary-btn" id="quiz-close-btn" type="button">稍後再答</button>
             </div>
         </div>
     </div>
 
-    <!-- 角色自訂配色與榮譽飾品室 -->
+    <!-- 角色深色系換裝室 -->
     <div class="modal-backdrop" id="wardrobe-modal">
-        <div class="modal-card" style="max-width: 490px;">
-            <h2 style="font-size: 1.7rem; color: #0F172A; font-weight: 900;">🎨 探險家自訂配色與飾品</h2>
-            <p style="color: #475569; font-weight: 700; margin-top: 4px; font-size:0.95rem;">
-                衣著與手提物品會隨天氣問答自動更換，你亦可自訂喜愛配色及榮譽飾品！
+        <div class="modal-card" style="max-width: 480px;">
+            <h2 style="font-size: 1.65rem; color: #0F172A; font-weight: 900;">🎨 探險家服裝與榮譽飾品</h2>
+            <p style="color: #475569; font-weight: 700; margin-top: 4px; font-size:0.92rem;">
+                收集四季大獎章可解鎖專屬榮譽飾品！
             </p>
 
-            <div class="wardrobe-section-title">🧥 外套自訂鮮明色系</div>
+            <div class="wardrobe-section-title">🧥 深色高對比外套配色</div>
             <div class="color-swatches" id="shirt-swatches"></div>
 
-            <div class="wardrobe-section-title">🧢 帽飾自訂鮮明色系</div>
+            <div class="wardrobe-section-title">🧢 帽飾深色系配色</div>
             <div class="color-swatches" id="hat-swatches"></div>
 
-            <div class="wardrobe-section-title">✨ 榮譽飾品（收集獎章解鎖）</div>
+            <div class="wardrobe-section-title">✨ 榮譽飾品（收集大獎章解鎖）</div>
             <div class="gear-grid">
                 <button class="gear-btn" id="gear-glasses" type="button">
-                    <span style="font-size:1.55rem;">🕶️</span>
+                    <span style="font-size:1.5rem;">🕶️</span>
                     <span>太陽眼鏡</span>
-                    <small id="gear-glasses-req">2 枚獎章解鎖</small>
+                    <small id="gear-glasses-req">1 枚大獎章解鎖</small>
                 </button>
                 <button class="gear-btn" id="gear-cape" type="button">
-                    <span style="font-size:1.55rem;">🦸</span>
+                    <span style="font-size:1.5rem;">🦸</span>
                     <span>英雄披風</span>
-                    <small id="gear-cape-req">5 枚獎章解鎖</small>
+                    <small id="gear-cape-req">2 枚大獎章解鎖</small>
                 </button>
                 <button class="gear-btn" id="gear-crown" type="button">
-                    <span style="font-size:1.55rem;">👑</span>
-                    <span>四季皇冠</span>
-                    <small id="gear-crown-req">8 枚獎章解鎖</small>
+                    <span style="font-size:1.5rem;">👑</span>
+                    <span>王者皇冠</span>
+                    <small id="gear-crown-req">3 枚大獎章解鎖</small>
                 </button>
             </div>
 
-            <button class="primary-cta-btn" id="wardrobe-done-btn" style="margin-top: 18px;">✅ 完成設定</button>
+            <button class="primary-cta-btn" id="wardrobe-done-btn" style="margin-top: 16px;">✅ 完成設定</button>
         </div>
     </div>
 
-    <!-- 榮譽證書視窗 -->
+    <!-- 四季大獎章完成榮譽證書視窗 -->
     <div class="modal-backdrop" id="cert-modal">
         <div class="modal-card" style="max-width: 620px; border-color: #FACC15;">
-            <h2 style="font-size: 1.75rem; color: #854D0E; font-weight: 900;">🏆 四季科學小達人榮譽證書</h2>
-            <p style="color: #475569; font-weight: 700; margin-top: 4px;">輸入班別與姓名，即可下載高清 PNG 證書圖片！</p>
+            <h2 style="font-size: 1.75rem; color: #854D0E; font-weight: 900;">🏆 四季生態大獎章大師證書</h2>
+            <p style="color: #475569; font-weight: 700; margin-top: 4px;">恭喜集齊春、夏、秋、冬四枚香港生態大獎章！</p>
 
             <div class="cert-inputs">
                 <input type="text" id="student-class" class="cert-input" placeholder="班別（例：2A）" maxlength="10" value="2A">
