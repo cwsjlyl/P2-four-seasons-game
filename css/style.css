@@ -44,7 +44,7 @@ html, body {
     transition: opacity 0.08s ease-out;
 }
 
-/* ── 精簡緊湊 HUD（釋放更大遊戲視野） ── */
+/* ── 精簡緊湊 HUD（釋放最大中央遊戲畫面，絕不遮擋主角） ── */
 #ui-layer {
     position: fixed;
     inset: 0;
@@ -69,7 +69,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: 5px;
-    max-width: 34%;
+    max-width: 35%;
     z-index: 2;
 }
 
@@ -209,7 +209,6 @@ html, body {
     transition: all 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* 已完成 2 個小任務、等待與香港動植物互動領取大獎章 */
 .poke-badge-slot.ready-guardian .badge-svg-wrap {
     border-color: #FACC15;
     box-shadow: 0 0 12px rgba(250, 204, 21, 0.85);
@@ -220,7 +219,6 @@ html, body {
     opacity: 0.9;
 }
 
-/* 已獲得該季寶可夢級大獎章！ */
 .poke-badge-slot.unlocked .badge-svg-wrap {
     background: radial-gradient(circle, rgba(254, 240, 138, 0.45), rgba(234, 179, 8, 0.15));
     border-color: #FEF08A;
@@ -230,7 +228,6 @@ html, body {
 .poke-badge-slot.unlocked .poke-svg {
     filter: none;
     opacity: 1;
-    drop-shadow: 0 2px 6px rgba(250, 204, 21, 0.7);
 }
 
 @keyframes badgePulse {
@@ -238,38 +235,14 @@ html, body {
     to { transform: scale(1.08); }
 }
 
-.sub-pips {
-    display: flex;
-    gap: 5px;
-    margin-top: 1px;
-}
+.sub-pips { display: flex; gap: 5px; margin-top: 1px; }
+.pip { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); border: 1.5px solid rgba(255, 255, 255, 0.5); transition: all 0.25s; }
+.pip.done { background: #4ADE80; border-color: #FEF08A; box-shadow: 0 0 6px #4ADE80; }
 
-.pip {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.22);
-    border: 1.5px solid rgba(255, 255, 255, 0.5);
-    transition: all 0.25s;
-}
+.badge-lbl { font-size: 0.64rem; font-weight: 900; color: #CBD5E1; white-space: nowrap; }
+.poke-badge-slot.unlocked .badge-lbl { color: #FEF08A; }
 
-.pip.done {
-    background: #4ADE80;
-    border-color: #FEF08A;
-    box-shadow: 0 0 6px #4ADE80;
-}
-
-.badge-lbl {
-    font-size: 0.64rem;
-    font-weight: 900;
-    color: #CBD5E1;
-    white-space: nowrap;
-}
-.poke-badge-slot.unlocked .badge-lbl {
-    color: #FEF08A;
-}
-
-/* ── 右上方半透明虛擬地圖（精巧不遮擋畫面） ── */
+/* ── 右上方半透明虛擬地圖 ── */
 #minimap-panel {
     width: 152px;
     background: rgba(15, 23, 42, 0.48);
@@ -284,56 +257,19 @@ html, body {
     z-index: 2;
 }
 
-.minimap-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: #F8FAFC;
-    font-size: 0.7rem;
-    font-weight: 900;
-    margin-bottom: 4px;
-}
+.minimap-header { display: flex; justify-content: space-between; align-items: center; color: #F8FAFC; font-size: 0.7rem; font-weight: 900; margin-bottom: 4px; }
+#minimap-zone-short { background: rgba(255, 255, 255, 0.22); padding: 1px 6px; border-radius: 999px; color: #FEF08A; }
 
-#minimap-zone-short {
-    background: rgba(255, 255, 255, 0.22);
-    padding: 1px 6px;
-    border-radius: 999px;
-    color: #FEF08A;
-}
-
-.minimap-canvas-wrap {
-    position: relative;
-    width: 134px;
-    height: 134px;
-    margin: 0 auto;
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1.5px solid rgba(255, 255, 255, 0.55);
-}
-
+.minimap-canvas-wrap { position: relative; width: 134px; height: 134px; margin: 0 auto; border-radius: 12px; overflow: hidden; border: 1.5px solid rgba(255, 255, 255, 0.55); }
 #minimap-canvas { width: 100%; height: 100%; display: block; }
 
-.compass-lbl {
-    position: absolute;
-    font-size: 0.6rem;
-    font-weight: 900;
-    color: #FFFFFF;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.9);
-    pointer-events: none;
-}
+.compass-lbl { position: absolute; font-size: 0.6rem; font-weight: 900; color: #FFFFFF; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none; }
 .compass-lbl.n { top: 1px; left: 50%; transform: translateX(-50%); color: #FCA5A5; }
 .compass-lbl.s { bottom: 1px; left: 50%; transform: translateX(-50%); }
 .compass-lbl.w { left: 3px; top: 50%; transform: translateY(-50%); }
 .compass-lbl.e { right: 3px; top: 50%; transform: translateY(-50%); }
 
-.minimap-legend {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 4px;
-    font-size: 0.6rem;
-    font-weight: 800;
-    color: #E2E8F0;
-}
+.minimap-legend { display: flex; justify-content: space-between; margin-top: 4px; font-size: 0.6rem; font-weight: 800; color: #E2E8F0; }
 .minimap-legend span { display: inline-flex; align-items: center; gap: 2px; }
 .dot { width: 7px; height: 7px; display: inline-block; border-radius: 2px; }
 .dot.bld { background: #FFFFFF; border: 1px solid #0F172A; }
@@ -341,25 +277,25 @@ html, body {
 .dot.eco { background: #4ADE80; border-radius: 50%; border: 1px solid #FEF08A; }
 .dot.mnk { background: #F59E0B; border-radius: 50%; }
 
-/* ── 動態提示橫幅（位於中央徽章盒下方） ── */
+/* ── 頂部提示橫幅（固定於徽章盒下方，不再懸停於畫面正中央，並自動淡出消失） ── */
 #weather-toast {
     position: fixed;
-    top: calc(104px + var(--safe-top));
+    top: calc(102px + var(--safe-top));
     left: 50%;
-    transform: translate(-50%, -24px);
+    transform: translate(-50%, -20px);
     opacity: 0;
     background: linear-gradient(135deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.92));
     border: 2.5px solid #FACC15;
     color: #FFFFFF;
-    padding: 9px 18px;
-    border-radius: 20px;
+    padding: 8px 16px;
+    border-radius: 18px;
     display: flex;
     align-items: center;
     gap: 10px;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
     z-index: 80;
-    max-width: min(88vw, 520px);
-    transition: transform 0.35s, opacity 0.3s;
+    max-width: min(86vw, 500px);
+    transition: transform 0.3s, opacity 0.3s;
     pointer-events: none;
 }
 
@@ -368,32 +304,38 @@ html, body {
     opacity: 1;
 }
 
-.toast-icon { font-size: 1.85rem; flex-shrink: 0; }
-.toast-title { font-size: 0.96rem; font-weight: 900; color: #FEF08A; }
-.toast-desc { font-size: 0.84rem; font-weight: 700; color: #F1F5F9; margin-top: 1px; }
+.toast-icon { font-size: 1.75rem; flex-shrink: 0; }
+.toast-title { font-size: 0.92rem; font-weight: 900; color: #FEF08A; }
+.toast-desc { font-size: 0.82rem; font-weight: 700; color: #F1F5F9; margin-top: 1px; }
 
 #mission-banner {
-    align-self: center;
-    background: rgba(15, 23, 42, 0.78);
+    position: fixed;
+    top: calc(102px + var(--safe-top));
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.82);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     color: #FFFFFF;
     padding: 7px 18px;
     border-radius: 999px;
-    font-size: 0.86rem;
+    font-size: 0.84rem;
     font-weight: 800;
-    border: 1.5px solid rgba(255, 255, 255, 0.4);
+    border: 1.5px solid rgba(250, 204, 21, 0.65);
     text-align: center;
-    max-width: min(90vw, 640px);
+    max-width: min(88vw, 560px);
     transition: opacity 0.4s;
+    pointer-events: none;
+    z-index: 25;
 }
 
-/* ── 精巧觸控區（減少遮擋視野） ── */
+/* ── 精巧觸控區 ── */
 .controls-bottom {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
     width: 100%;
+    margin-top: auto;
 }
 
 #joystick-zone {
@@ -421,12 +363,7 @@ html, body {
     pointer-events: none;
 }
 
-.action-buttons {
-    display: flex;
-    gap: 12px;
-    align-items: flex-end;
-    pointer-events: auto;
-}
+.action-buttons { display: flex; gap: 12px; align-items: flex-end; pointer-events: auto; }
 
 .round-action-btn {
     border-radius: 50%;
@@ -447,32 +384,8 @@ html, body {
 #jump-btn   { width: 88px; height: 88px; background: linear-gradient(145deg, #F97316, #C2410C); font-size: 1.0rem; }
 
 /* ── 問答彈窗 ── */
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.64);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
-    pointer-events: auto;
-    padding: 14px;
-}
-
-.modal-card {
-    background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
-    width: min(94vw, 630px);
-    max-height: 90dvh;
-    overflow-y: auto;
-    border-radius: 28px;
-    padding: 20px 22px;
-    box-shadow: 0 24px 54px rgba(15, 23, 42, 0.45);
-    border: 5px solid #BAE6FD;
-    text-align: center;
-    animation: popIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
+.modal-backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.64); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: none; justify-content: center; align-items: center; z-index: 100; pointer-events: auto; padding: 14px; }
+.modal-card { background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); width: min(94vw, 630px); max-height: 90dvh; overflow-y: auto; border-radius: 28px; padding: 20px 22px; box-shadow: 0 24px 54px rgba(15, 23, 42, 0.45); border: 5px solid #BAE6FD; text-align: center; animation: popIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .modal-card.weather-quiz-mode { border-color: #38BDF8; background: linear-gradient(180deg, #F0F9FF 0%, #FFFFFF 100%); }
 .modal-card.guardian-quiz-mode { border-color: #FACC15; background: linear-gradient(180deg, #FEFCE8 0%, #FFFFFF 100%); }
 

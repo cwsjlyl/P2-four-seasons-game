@@ -1,23 +1,23 @@
 /* =========================================================================
-   四季小探險家 3D — 物理常數、香港動植物生態互動、天氣換裝與題庫資料
+   四季小探險家 3D — 物理常數、香港動植物生態互動、30秒天氣換裝與題庫資料
    ========================================================================= */
 window.GameApp = window.GameApp || {};
 
 (() => {
     'use strict';
 
-    /* 1. 校準物理參數（支援流暢攀登高山、木拱橋通行、河流水阻與舒適天氣週期） */
+    /* 1. 校準物理參數（支援流暢攀登高山、木拱橋通行、河流水阻與 30 秒天氣週期） */
     GameApp.PHYSICS = Object.freeze({
         WORLD_LIMIT: 94.0,          // 島嶼邊界半徑 (m)
         WATER_LEVEL: -0.32,         // 河流水面高度 (m)
         RIVER_HALF_W: 4.4,          // 河道半寬 (m)
         GRAVITY: -24.5,             // 重力加速度 (m/s²)
-        JUMP_VELOCITY: 11.4,        // 起跳初速 (m/s)，方便跳上山坡岩石
+        JUMP_VELOCITY: 11.4,        // 起跳初速 (m/s)
         WALK_SPEED: 14.2,           // 正常行走速度 (m/s)
         SPRINT_SPEED: 22.5,         // 衝刺最高速度 (m/s)
-        ACCEL_GROUND: 58.0,         // 地面推進加速度 (m/s²)，上山依然充沛有力
+        ACCEL_GROUND: 58.0,         // 地面推進加速度 (m/s²)
         ACCEL_AIR: 20.0,            // 空中微調加速度 (m/s²)
-        MAX_CLIMB_SLOPE: 1.45,      // 允許攀登至約 55° 山坡，所有四季高山均可登頂！
+        MAX_CLIMB_SLOPE: 1.45,      // 所有四季高山均可登頂
         WATER_DRAG: 6.2,            // 河道涉水流體阻力 (1/s)
         RIVER_FLOW_SPEED: 2.5,      // 河水順流推力 (m/s²)
         PLAYER_RADIUS: 0.78,        // 玩家碰撞半徑 (m)
@@ -25,7 +25,7 @@ window.GameApp = window.GameApp || {};
         MAX_DT: 0.05,               // 單幀最大時間步長 (s)
         STAMINA_DRAIN: 22.0,        // 衝刺消耗體力 (%/s)
         STAMINA_REGEN: 26.0,        // 體力回復速度 (%/s)
-        WEATHER_CYCLE_SEC: 95.0,    // 天氣自動轉變延長至 95 秒，節奏舒適不頻密！
+        WEATHER_CYCLE_SEC: 30.0,    // 約每 30 秒自動轉變一次天氣！
         SURFACE_FRICTION: {
             plaza:  11.0,
             bridge: 10.6,
@@ -44,7 +44,7 @@ window.GameApp = window.GameApp || {};
         winter: { short: '冬季園區', name: '⛄ 冬季大帽山嶺', surface: '結霜高地', tagBg: '#E2E8F0', tagColor: '#1E3A8A', sky: 0x94A3B8, fog: 0xE2E8F0, fogD: 0.0028, sun: 0.92, hemi: 0.92 }
     });
 
-    /* 2. 四季香港特色動植物互動系統（每區 1 個大獎章守護物種 + 2 個香港本土動植物互動點） */
+    /* 2. 四季香港特色動植物互動系統 */
     GameApp.HK_GUARDIANS = Object.freeze({
         spring: {
             id: 'bauhinia',
@@ -52,7 +52,7 @@ window.GameApp = window.GameApp || {};
             badgeName: '紫荊花露大獎章',
             name: '🌺 香港市花洋紫荊與鳳蝶',
             x: -55, z: -32,
-            prompt: '你已完成春季 2 個任務點！請跟隨金色箭嘴前往【🌺 洋紫荊與鳳蝶】進行生態互動！',
+            prompt: '已完成春季 2 個任務點！請跟隨金色箭嘴前往【🌺 洋紫荊與鳳蝶】互動！',
             intro: '洋紫荊在香港首次被發現，紫紅色五片花瓣在春天盛開，吸引鳳蝶前來採蜜！',
             quiz: {
                 q: '我們來到香港市花「🌺 洋紫荊」樹下觀察鳳蝶！請問洋紫荊的花朵有甚麼特別之處？',
@@ -67,7 +67,7 @@ window.GameApp = window.GameApp || {};
             badgeName: '碧浪綠龜大獎章',
             name: '🐢 南丫島深灣綠海龜',
             x: 32, z: -56,
-            prompt: '你已完成夏季 2 個任務點！請跟隨金色箭嘴前往沙灘尋找【🐢 綠海龜】互動！',
+            prompt: '已完成夏季 2 個任務點！請跟隨金色箭嘴前往沙灘尋找【🐢 綠海龜】互動！',
             intro: '綠海龜是受保護的海洋爬行動物，每年夏天都會游回香港南丫島深灣沙灘產卵！',
             quiz: {
                 q: '夏天「🐢 綠海龜」游回香港南丫島深灣沙灘產卵，作為愛護自然的小學生應該怎樣做？',
@@ -82,7 +82,7 @@ window.GameApp = window.GameApp || {};
             badgeName: '金楓琵鷺大獎章',
             name: '🦩 米埔濕地黑臉琵鷺',
             x: -29, z: 56,
-            prompt: '你已完成秋季 2 個任務點！請跟隨金色箭嘴前往河岸濕地尋找【🦩 黑臉琵鷺】互動！',
+            prompt: '已完成秋季 2 個任務點！請跟隨金色箭嘴前往河岸濕地尋找【🦩 黑臉琵鷺】互動！',
             intro: '黑臉琵鷺是世界珍稀候鳥，每年秋天都會飛來香港米埔濕地，用湯匙形狀的黑嘴在淺水覓食！',
             quiz: {
                 q: '秋天飛來香港米埔的珍貴候鳥「🦩 黑臉琵鷺」，牠黑色的嘴巴像甚麼形狀，方便在淺水掃動捉小魚蝦？',
@@ -97,7 +97,7 @@ window.GameApp = window.GameApp || {};
             badgeName: '霜晶穿山甲大獎章',
             name: '🦔 香港中華穿山甲',
             x: 56, z: 30,
-            prompt: '你已完成冬季 2 個任務點！請跟隨金色箭嘴前往山林岩洞尋找【🦔 中華穿山甲】互動！',
+            prompt: '已完成冬季 2 個任務點！請跟隨金色箭嘴前往山林岩洞尋找【🦔 中華穿山甲】互動！',
             intro: '中華穿山甲全身披著堅硬鱗片，是香港極度珍貴的受保護野生哺乳動物，冬天會躲進溫暖洞穴避寒！',
             quiz: {
                 q: '冬天在香港山林洞穴保暖的「🦔 中華穿山甲」遇到危險或寒冷時，會怎樣保護自己？',
@@ -108,7 +108,6 @@ window.GameApp = window.GameApp || {};
         }
     });
 
-    // 各季額外香港特色動植物生態觀察點（走近自動彈出廣東話趣味介紹！）
     GameApp.HK_AMBIENT_SPECIES = Object.freeze([
         { id: 'romer_frog', season: 'spring', icon: '🐸', name: '盧氏小樹蛙', x: -27, z: -36, fact: '盧氏小樹蛙係香港特有嘅迷你青蛙，身型只有手指頭咁大，春天最鍾意喺濕潤樹林鳴叫！' },
         { id: 'bell_flower', season: 'spring', icon: '🌷', name: '香港吊鐘花', x: -62, z: -48, fact: '吊鐘花喺春天農曆新年前後開花，粉紅色花朵好似一個個倒掛嘅小鈴鐺，受法例保護唔可以採摘㗎！' },
@@ -120,7 +119,6 @@ window.GameApp = window.GameApp || {};
         { id: 'camellia', season: 'winter', icon: '🌺', name: '香港茶（山茶花）', x: 64, z: 62, fact: '香港茶係少數喺寒冷冬季依然盛開白色花朵嘅香港原生植物，生命力非常頑強！' }
     ]);
 
-    /* 3. 四季各 2 個固定任務點座標（任務 ① 設於河畔平原，任務 ② 設於可攀登高山觀景台！） */
     GameApp.SEASON_MISSIONS = Object.freeze({
         spring: [
             { id: 'spring_m1', idx: 0, label: '春任務 ① 河畔花徑', x: -32, z: -56 },
@@ -140,7 +138,7 @@ window.GameApp = window.GameApp || {};
         ]
     });
 
-    /* 4. 動態天氣配置（深色高對比服裝，答對僅更換外觀與手提物品，不發放獎章） */
+    /* 4. 動態天氣配置（約 30 秒變化一次，答對僅更換外觀與手提物品，不發放獎章） */
     GameApp.WEATHER_STATES = {
         spring: [
             {
@@ -440,7 +438,6 @@ window.GameApp = window.GameApp || {};
             [523.25, 659.25, 783.99, 1046.5].forEach((f, idx) => this.tone(f, 'triangle', 0.22, 0.16, idx * 0.09));
         },
         playBadgeUnlock() {
-            // 寶可夢獲得道館徽章風格慶祝樂音！
             [523.25, 659.25, 783.99, 1046.5, 1174.66, 1318.51, 1567.98].forEach((f, i) => {
                 this.tone(f, 'triangle', 0.28, 0.18, i * 0.1);
             });
