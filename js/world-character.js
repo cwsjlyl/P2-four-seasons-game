@@ -1,17 +1,18 @@
 /* =========================================================================
-   四季小探險家 3D — Switch 級別山河拱橋 3D 地形、高對比精細主角與手提物品建模
+   四季小探險家 3D — 可攀登高山河流地形、深色高對比主角、香港特色動植物 3D 生態建模
    ========================================================================= */
 (() => {
     'use strict';
 
-    const { PHYSICS, SEASON_META } = GameApp;
+    const { PHYSICS, SEASON_META, HK_GUARDIANS, HK_AMBIENT_SPECIES, SEASON_MISSIONS } = GameApp;
 
     const canvas = document.getElementById('game-canvas');
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(SEASON_META.plaza.sky);
     scene.fog = new THREE.FogExp2(SEASON_META.plaza.fog, SEASON_META.plaza.fogD);
 
-    const camera = new THREE.PerspectiveCamera(47, window.innerWidth / window.innerHeight, 0.3, 310);
+    // 廣角鏡頭 (FOV 58°)，讓學生在 iPad 看到更廣闊的地圖與遠山目標
+    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.35, 360);
 
     const renderer = new THREE.WebGLRenderer({
         canvas,
@@ -24,11 +25,11 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.12;
+    renderer.toneMappingExposure = 1.0;
 
     const maxAniso = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
 
-    /* ── 1. Blender 工作室 PMREM 環境反射貼圖 (IBL) 與清漆 PBR 工廠 ── */
+    /* ── 1. PMREM 工作室環境光反射 (IBL) 與清漆 PBR 材質 ── */
     try {
         const pmrem = new THREE.PMREMGenerator(renderer);
         pmrem.compileEquirectangularShader();
@@ -37,29 +38,21 @@
         c.width = 128; c.height = 128;
         const g = c.getContext('2d');
         const grd = g.createLinearGradient(0, 0, 0, 128);
-        grd.addColorStop(0.0, '#0EA5E9');
-        grd.addColorStop(0.46, '#E0F2FE');
-        grd.addColorStop(0.54, '#FEF9C3');
+        grd.addColorStop(0.0, '#0284C7');
+        grd.addColorStop(0.5, '#E0F2FE');
         grd.addColorStop(1.0, '#4ADE80');
-        g.fillStyle = grd;
-        g.fillRect(0, 0, 128, 128);
-        g.fillStyle = '#FFFFFF';
-        g.beginPath(); g.arc(64, 24, 16, 0, Math.PI * 2); g.fill();
+        g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
         const envTex = new THREE.CanvasTexture(c);
         envTex.encoding = THREE.sRGBEncoding;
-        const domeGeo = new THREE.SphereGeometry(40, 20, 14);
+        const domeGeo = new THREE.SphereGeometry(40, 18, 12);
         envScene.add(new THREE.Mesh(domeGeo, new THREE.MeshBasicMaterial({ map: envTex, side: THREE.BackSide })));
         scene.environment = pmrem.fromScene(envScene, 0.04).texture;
         domeGeo.dispose(); envTex.dispose(); pmrem.dispose();
-    } catch (e) { /* WebGL1 fallback */ }
+    } catch (e) { /* fallback */ }
 
-    function toyMat(color, roughness = 0.38, clearcoat = 0.35, metalness = 0.04) {
+    function toyMat(color, roughness = 0.4, clearcoat = 0.32, metalness = 0.04) {
         return new THREE.MeshPhysicalMaterial({
-            color,
-            roughness,
-            metalness,
-            clearcoat,
-            clearcoatRoughness: 0.22
+            color, roughness, metalness, clearcoat, clearcoatRoughness: 0.24
         });
     }
 
@@ -69,27 +62,50 @@
         const g = c.getContext('2d');
         const r = g.createRadialGradient(64, 64, 5, 64, 64, 64);
         r.addColorStop(0, '#FFFFFF');
-        r.addColorStop(0.3, innerRgba);
+        r.addColorStop(0.32, innerRgba);
         r.addColorStop(1, outerRgba);
-        g.fillStyle = r;
-        g.fillRect(0, 0, 128, 128);
+        g.fillStyle = r; g.fillRect(0, 0, 128, 128);
         const t = new THREE.CanvasTexture(c);
         t.encoding = THREE.sRGBEncoding;
         return t;
     }
 
-    /* ── 2. 三點式 Switch 燈光與太陽 ── */
-    const hemiLight = new THREE.HemisphereLight(0xFFFFFF, 0x64748B, 0.88);
-    hemiLight.position.set(0, 65, 0);
+    function createLabelSprite(text, bgHex = '#0F172A', borderHex = '#FACC15', widthScale = 5.4) {
+        const c = document.createElement('canvas');
+        c.width = 384; c.height = 96;
+        const g = c.getContext('2d');
+        g.fillStyle = bgHex;
+        g.strokeStyle = borderHex;
+        g.lineWidth = 7;
+        g.beginPath();
+        g.roundRect ? g.roundRect(10, 14, 364, 68, 34) : g.rect(10, 14, 364, 68);
+        g.fill();
+        g.stroke();
+        g.fillStyle = '#FFFFFF';
+        g.font = '900 30px "Noto Sans TC", sans-serif';
+        g.textAlign = 'center';
+        g.textBaseline = 'middle';
+        g.fillText(text, 192, 49);
+        const tex = new THREE.CanvasTexture(c);
+        tex.encoding = THREE.sRGBEncoding;
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+        sp.scale.set(widthScale, widthScale * 0.25, 1);
+        sp.renderOrder = 10;
+        return sp;
+    }
+
+    /* ── 2. 燈光與太陽 ── */
+    const hemiLight = new THREE.HemisphereLight(0xFFFFFF, 0x475569, 0.88);
+    hemiLight.position.set(0, 70, 0);
     scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xFFFBEB, 1.2);
-    sunLight.position.set(58, 86, 46);
+    const sunLight = new THREE.DirectionalLight(0xFFFBEB, 1.15);
+    sunLight.position.set(58, 92, 46);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.set(2048, 2048);
     sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 230;
-    const sExt = 86;
+    sunLight.shadow.camera.far = 240;
+    const sExt = 92;
     sunLight.shadow.camera.left = -sExt;
     sunLight.shadow.camera.right = sExt;
     sunLight.shadow.camera.top = sExt;
@@ -97,154 +113,99 @@
     sunLight.shadow.bias = -0.0005;
     scene.add(sunLight);
 
-    const rimLight = new THREE.DirectionalLight(0xBAE6FD, 0.42);
-    rimLight.position.set(-50, 38, -50);
-    scene.add(rimLight);
-
-    const sunOrb = new THREE.Group();
-    sunOrb.position.set(72, 92, -72);
-    sunOrb.add(new THREE.Mesh(new THREE.SphereGeometry(6.8, 20, 20), new THREE.MeshBasicMaterial({ color: 0xFEF08A, fog: false })));
-    const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: createGlowTex('rgba(253,224,71,0.85)', 'rgba(253,224,71,0)'),
-        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false
-    }));
-    sunHalo.scale.set(38, 38, 1);
-    sunOrb.add(sunHalo);
-    scene.add(sunOrb);
-
-    /* ── 3. 數學統一地形高度場：高山、丘陵、蜿蜒十字河流與 4 座木拱橋 ── */
+    /* ── 3. 可自由攀登的四季高山、蜿蜒河流與 4 座木拱橋高度場 ── */
     function smoothstep(e0, e1, x) {
         const t = THREE.MathUtils.clamp((x - e0) / (e1 - e0), 0, 1);
         return t * t * (3 - 2 * t);
     }
 
-    // 河流中心線蜿蜒函數
     function riverCenterX(z) { return Math.sin(z * 0.08) * 3.0; }
     function riverCenterZ(x) { return Math.sin(x * 0.08) * 3.0; }
 
-    // 四大園區巍峨高山與可攀爬丘陵定義
+    // 精心設計的可攀登四季主峰（sigma 寬廣平緩，最大坡度約 24°–28°，主角可輕鬆直登山頂任務點 ②！）
     const MOUNTAIN_PEAKS = [
-        // 外圍高山群（高 15m–25m，山腳可走、陡壁物理阻擋）
-        { x: -80, z: -80, h: 21.5, sigma: 13.5, season: 'spring', high: true },
-        { x: -84, z: -55, h: 15.0, sigma: 10.5, season: 'spring', high: true },
-        { x: -55, z: -84, h: 14.5, sigma: 10.5, season: 'spring', high: true },
-
-        { x:  80, z: -80, h: 20.5, sigma: 13.5, season: 'summer', high: true },
-        { x:  84, z: -55, h: 14.5, sigma: 10.5, season: 'summer', high: true },
-        { x:  55, z: -84, h: 14.0, sigma: 10.5, season: 'summer', high: true },
-
-        { x: -80, z:  80, h: 22.5, sigma: 13.5, season: 'autumn', high: true },
-        { x: -84, z:  55, h: 15.5, sigma: 10.5, season: 'autumn', high: true },
-        { x: -55, z:  84, h: 15.0, sigma: 10.5, season: 'autumn', high: true },
-
-        { x:  80, z:  80, h: 25.5, sigma: 14.2, season: 'winter', high: true }, // 香港大帽山結霜意象高峰
-        { x:  84, z:  55, h: 17.5, sigma: 10.8, season: 'winter', high: true },
-        { x:  55, z:  84, h: 16.5, sigma: 10.8, season: 'winter', high: true },
-
-        // 園區內平緩可攀爬觀景小山丘（高 2.8m–3.8m，坡度 < 22°）
-        { x: -64, z: -29, h: 3.4, sigma: 9.5, season: 'spring', high: false },
-        { x: -29, z: -64, h: 3.2, sigma: 9.5, season: 'spring', high: false },
-        { x:  64, z: -29, h: 3.0, sigma: 9.5, season: 'summer', high: false },
-        { x:  29, z: -64, h: 3.2, sigma: 9.5, season: 'summer', high: false },
-        { x: -64, z:  29, h: 3.6, sigma: 9.5, season: 'autumn', high: false },
-        { x: -29, z:  64, h: 3.4, sigma: 9.5, season: 'autumn', high: false },
-        { x:  64, z:  29, h: 3.8, sigma: 9.5, season: 'winter', high: false },
-        { x:  29, z:  64, h: 3.5, sigma: 9.5, season: 'winter', high: false }
+        { x: -72, z: -72, h: 13.5, sigma: 18.5, season: 'spring', high: true, name: '櫻花山' },
+        { x:  72, z: -72, h: 13.0, sigma: 18.5, season: 'summer', high: true, name: '望海山' },
+        { x: -72, z:  72, h: 14.2, sigma: 18.5, season: 'autumn', high: true, name: '大東芒草山' },
+        { x:  72, z:  72, h: 15.6, sigma: 19.2, season: 'winter', high: true, name: '大帽霜峰' },
+        // 連綿副峰丘陵（皆可自由行走攀爬）
+        { x: -82, z: -46, h: 6.5, sigma: 13.0, season: 'spring', high: false },
+        { x:  82, z: -46, h: 6.0, sigma: 13.0, season: 'summer', high: false },
+        { x: -82, z:  46, h: 6.8, sigma: 13.0, season: 'autumn', high: false },
+        { x:  82, z:  46, h: 7.4, sigma: 13.0, season: 'winter', high: false }
     ];
 
-    // 5 座核心建築地標平坦台地座標（供地形整平與右上小地圖顯示）
     const LANDMARKS = [
         { id: 'hub',    name: '氣象科學台', x:   0, z:   0, flatR: 19.5, color: '#FEF08A' },
-        { id: 'spring', name: '春花溫室',   x: -43, z: -43, flatR:  9.5, color: '#F472B6' },
-        { id: 'summer', name: '陽光瞭望塔', x:  43, z: -43, flatR:  9.5, color: '#38BDF8' },
-        { id: 'autumn', name: '紅葉穀倉',   x: -43, z:  43, flatR:  9.5, color: '#FB923C' },
-        { id: 'winter', name: '冰雪圓頂屋', x:  43, z:  43, flatR:  9.5, color: '#A5B4FC' }
+        { id: 'spring', name: '春花溫室',   x: -42, z: -42, flatR:  8.5, color: '#F472B6' },
+        { id: 'summer', name: '陽光瞭望塔', x:  42, z: -42, flatR:  8.0, color: '#38BDF8' },
+        { id: 'autumn', name: '紅葉穀倉',   x: -42, z:  42, flatR:  8.5, color: '#FB923C' },
+        { id: 'winter', name: '冰雪圓頂屋', x:  42, z:  42, flatR:  8.5, color: '#A5B4FC' }
     ];
 
-    // 4 座跨越四季河流的精緻木製拱橋
     const BRIDGES = [
-        { id: 'north', axis: 'x', x: riverCenterX(-50), z: -50, halfLen: 6.0, halfWid: 2.35, archH: 1.32 },
-        { id: 'south', axis: 'x', x: riverCenterX( 50), z:  50, halfLen: 6.0, halfWid: 2.35, archH: 1.32 },
-        { id: 'west',  axis: 'z', x: -50, z: riverCenterZ(-50), halfLen: 6.0, halfWid: 2.35, archH: 1.32 },
-        { id: 'east',  axis: 'z', x:  50, z: riverCenterZ( 50), halfLen: 6.0, halfWid: 2.35, archH: 1.32 }
+        { id: 'north', axis: 'x', x: riverCenterX(-50), z: -50, halfLen: 6.0, halfWid: 2.4, archH: 1.28 },
+        { id: 'south', axis: 'x', x: riverCenterX( 50), z:  50, halfLen: 6.0, halfWid: 2.4, archH: 1.28 },
+        { id: 'west',  axis: 'z', x: -50, z: riverCenterZ(-50), halfLen: 6.0, halfWid: 2.4, archH: 1.28 },
+        { id: 'east',  axis: 'z', x:  50, z: riverCenterZ( 50), halfLen: 6.0, halfWid: 2.4, archH: 1.28 }
     ];
 
     function getRiverInfo(x, z) {
         const r = Math.hypot(x, z);
         const mask = smoothstep(21.5, 27.0, r);
         if (mask <= 0.001) return { inRiver: false, dist: 99, mask: 0, flowX: 0, flowZ: 0 };
-
         let dNS = 99, dWE = 99;
         if (Math.abs(z) > 20) dNS = Math.abs(x - riverCenterX(z));
         if (Math.abs(x) > 20) dWE = Math.abs(z - riverCenterZ(x));
-
         if (dNS < dWE) {
-            return {
-                inRiver: dNS < PHYSICS.RIVER_HALF_W,
-                dist: dNS,
-                mask,
-                flowX: 0,
-                flowZ: z < 0 ? -1 : 1
-            };
+            return { inRiver: dNS < PHYSICS.RIVER_HALF_W, dist: dNS, mask, flowX: 0, flowZ: z < 0 ? -1 : 1 };
         }
-        return {
-            inRiver: dWE < PHYSICS.RIVER_HALF_W,
-            dist: dWE,
-            mask,
-            flowX: x < 0 ? -1 : 1,
-            flowZ: 0
-        };
+        return { inRiver: dWE < PHYSICS.RIVER_HALF_W, dist: dWE, mask, flowX: x < 0 ? -1 : 1, flowZ: 0 };
     }
 
     function getTerrainHeight(x, z) {
         const r = Math.hypot(x, z);
-        // 基礎微起伏地面 (0.24m)
-        let h = 0.24 + (Math.sin(x * 0.09) * Math.cos(z * 0.09)) * 0.14 * smoothstep(20, 32, r);
+        let h = 0.24 + (Math.sin(x * 0.08) * Math.cos(z * 0.08)) * 0.12 * smoothstep(20, 32, r);
 
-        // 疊加高山與丘陵高斯曲面
         for (let i = 0; i < MOUNTAIN_PEAKS.length; i++) {
             const m = MOUNTAIN_PEAKS[i];
             const dx = x - m.x, dz = z - m.z;
             const d2 = dx * dx + dz * dz;
             if (d2 < m.sigma * m.sigma * 6.5) {
-                h += m.h * Math.exp(-d2 / (2 * m.sigma * m.sigma));
+                // 山頂微平觀景台設計（方便學生站立於山頂答題觀景）
+                const rawBell = Math.exp(-d2 / (2 * m.sigma * m.sigma));
+                const flatTopBell = Math.min(0.94, rawBell);
+                h += m.h * flatTopBell;
             }
         }
 
-        // 地標建築周圍平滑整平為穩固台地
         for (let i = 0; i < LANDMARKS.length; i++) {
             const lm = LANDMARKS[i];
             const d = Math.hypot(x - lm.x, z - lm.z);
-            if (d < lm.flatR + 4.5) {
-                const flatFactor = 1 - smoothstep(lm.flatR - 1.5, lm.flatR + 4.5, d);
-                h = THREE.MathUtils.lerp(h, 0.26, flatFactor);
+            if (d < lm.flatR + 4.0) {
+                const f = 1 - smoothstep(lm.flatR - 1.5, lm.flatR + 4.0, d);
+                h = THREE.MathUtils.lerp(h, 0.26, f);
             }
         }
 
-        // 雕刻蜿蜒十字河床（河底約 -1.16m，水面 -0.32m，最大水深約 0.84m 安全涉水深度）
         const rv = getRiverInfo(x, z);
         if (rv.dist < PHYSICS.RIVER_HALF_W + 1.4 && rv.mask > 0.01) {
             const t = THREE.MathUtils.clamp(rv.dist / (PHYSICS.RIVER_HALF_W + 0.8), 0, 1);
-            const carve = (1 - t * t) * 1.42 * rv.mask;
-            h -= carve;
+            h -= (1 - t * t) * 1.4 * rv.mask;
         }
-
         return h;
     }
 
     function getTerrainGradient(x, z) {
-        const eps = 0.45;
+        const eps = 0.5;
         const gx = (getTerrainHeight(x + eps, z) - getTerrainHeight(x - eps, z)) / (2 * eps);
         const gz = (getTerrainHeight(x, z + eps) - getTerrainHeight(x, z - eps)) / (2 * eps);
         return { gx, gz, slope: Math.hypot(gx, gz) };
     }
 
-    // 計算拱橋橋面高度（無縫銜接兩岸陸地高度）
     BRIDGES.forEach(b => {
-        const endA = b.axis === 'x' ? getTerrainHeight(b.x - b.halfLen, b.z) : getTerrainHeight(b.x, b.z - b.halfLen);
-        const endB = b.axis === 'x' ? getTerrainHeight(b.x + b.halfLen, b.z) : getTerrainHeight(b.x, b.z + b.halfLen);
-        b.baseEndA = endA;
-        b.baseEndB = endB;
+        b.baseEndA = b.axis === 'x' ? getTerrainHeight(b.x - b.halfLen, b.z) : getTerrainHeight(b.x, b.z - b.halfLen);
+        b.baseEndB = b.axis === 'x' ? getTerrainHeight(b.x + b.halfLen, b.z) : getTerrainHeight(b.x, b.z + b.halfLen);
     });
 
     function getBridgeDeckHeight(x, z) {
@@ -253,37 +214,33 @@
             const span = b.axis === 'x' ? (x - b.x) : (z - b.z);
             const lat  = b.axis === 'x' ? (z - b.z) : (x - b.x);
             if (Math.abs(span) <= b.halfLen && Math.abs(lat) <= b.halfWid) {
-                const u = span / b.halfLen; // -1 .. +1
+                const u = span / b.halfLen;
                 const baseY = THREE.MathUtils.lerp(b.baseEndA, b.baseEndB, (u + 1) * 0.5);
-                const arch = Math.cos(u * Math.PI * 0.5) * b.archH;
-                return { y: baseY + arch, bridge: b };
+                return { y: baseY + Math.cos(u * Math.PI * 0.5) * b.archH, bridge: b };
             }
         }
         return null;
     }
 
-    /* ── 4. 建立高精度頂點著色連續 3D 山河地形網格 + 法線凹凸細節 ── */
+    /* ── 4. 建立 3D 山河地形網格與登山步道石階 ── */
     const worldGroup = new THREE.Group();
     scene.add(worldGroup);
 
-    // 外圍蔚藍環島海洋
-    const oceanGeo = new THREE.CircleGeometry(260, 48);
+    const oceanGeo = new THREE.CircleGeometry(280, 48);
     oceanGeo.rotateX(-Math.PI / 2);
     const oceanMesh = new THREE.Mesh(oceanGeo, new THREE.MeshPhysicalMaterial({
-        color: 0x0284C7, roughness: 0.16, clearcoat: 0.9, clearcoatRoughness: 0.14
+        color: 0x0284C7, roughness: 0.16, clearcoat: 0.9
     }));
-    oceanMesh.position.y = -0.68;
+    oceanMesh.position.y = -0.7;
     worldGroup.add(oceanMesh);
 
-    // 細緻地面程序化凹凸紋理 (Detail Bump Map)
     const detailBumpTex = (() => {
         const c = document.createElement('canvas');
         c.width = 128; c.height = 128;
         const g = c.getContext('2d');
-        g.fillStyle = '#808080';
-        g.fillRect(0, 0, 128, 128);
-        for (let i = 0; i < 650; i++) {
-            g.fillStyle = i % 2 ? '#A8A8A8' : '#5E5E5E';
+        g.fillStyle = '#808080'; g.fillRect(0, 0, 128, 128);
+        for (let i = 0; i < 600; i++) {
+            g.fillStyle = i % 2 ? '#A5A5A5' : '#5E5E5E';
             g.fillRect(Math.random() * 128, Math.random() * 128, 3, 3);
         }
         const t = new THREE.CanvasTexture(c);
@@ -293,7 +250,7 @@
         return t;
     })();
 
-    const SEG = 156;
+    const SEG = 152;
     const terrainGeo = new THREE.PlaneGeometry(200, 200, SEG, SEG);
     terrainGeo.rotateX(-Math.PI / 2);
     const posArr = terrainGeo.attributes.position.array;
@@ -301,8 +258,7 @@
     const tmpCol = new THREE.Color();
 
     for (let i = 0; i < posArr.length; i += 3) {
-        const vx = posArr[i];
-        const vz = posArr[i + 2];
+        const vx = posArr[i], vz = posArr[i + 2];
         const vy = getTerrainHeight(vx, vz);
         posArr[i + 1] = vy;
 
@@ -310,71 +266,63 @@
         const rv = getRiverInfo(vx, vz);
 
         if (r < 20.8) {
-            // 中央石磚科學廣場（格紋微色差）
-            const checker = ((Math.floor(vx * 0.5) + Math.floor(vz * 0.5)) & 1) ? 0xE7E5E4 : 0xF5F5F4;
-            tmpCol.setHex(r > 19.2 ? 0xFACC15 : checker);
+            const chk = ((Math.floor(vx * 0.5) + Math.floor(vz * 0.5)) & 1) ? 0xD6D3D1 : 0xE7E5E4;
+            tmpCol.setHex(r > 19.2 ? 0xF59E0B : chk);
         } else if (vy < -0.18 && rv.mask > 0.2) {
-            // 清澈河床鵝卵石與細沙
-            tmpCol.setHex(vy < -0.65 ? 0x0EA5E9 : 0xFDE68A);
-        } else if (rv.dist < PHYSICS.RIVER_HALF_W + 1.3 && rv.mask > 0.2) {
-            // 河岸濕潤卵石沙岸
+            tmpCol.setHex(vy < -0.6 ? 0x0EA5E9 : 0xFDE68A);
+        } else if (rv.dist < PHYSICS.RIVER_HALF_W + 1.2 && rv.mask > 0.2) {
             tmpCol.setHex(0xFEF08A);
+        } else if (vx < 0 && vz < 0) {
+            if (vy > 9.5) tmpCol.setHex(0xF9A8D4);
+            else if (vy > 4.2) tmpCol.setHex(0x4ADE80);
+            else tmpCol.setHex(0x22C55E);
+        } else if (vx >= 0 && vz < 0) {
+            if (vy > 9.0) tmpCol.setHex(0x84CC16);
+            else if (vy > 3.2) tmpCol.setHex(0x65A30D);
+            else tmpCol.setHex(0xFCD34D);
+        } else if (vx < 0 && vz >= 0) {
+            if (vy > 9.5) tmpCol.setHex(0xF59E0B);
+            else if (vy > 4.0) tmpCol.setHex(0xEA580C);
+            else tmpCol.setHex(0xD97706);
         } else {
-            // 四季地貌與高山海拔分層色彩（Switch 鮮明飽和色調）
-            if (vx < 0 && vz < 0) {
-                // 春季：翠綠草地 -> 山腰嫩綠 -> 高山粉櫻花冠
-                if (vy > 11.5) tmpCol.setHex(0xF9A8D4);
-                else if (vy > 5.0) tmpCol.setHex(0x86EFAC);
-                else tmpCol.setHex(0x22C55E);
-            } else if (vx >= 0 && vz < 0) {
-                // 夏季：金黃海岸沙灘 -> 翠綠椰林山腰 -> 火山玄武岩山頂
-                if (vy > 11.0) tmpCol.setHex(0x78716C);
-                else if (vy > 3.2) tmpCol.setHex(0x65A30D);
-                else tmpCol.setHex(0xFBBF24);
-            } else if (vx < 0 && vz >= 0) {
-                // 秋季：琥珀落葉地 -> 楓紅山腰 -> 金紅岩峰
-                if (vy > 12.0) tmpCol.setHex(0xDC2626);
-                else if (vy > 4.2) tmpCol.setHex(0xEA580C);
-                else tmpCol.setHex(0xD97706);
-            } else {
-                // 冬季：銀白雪原 -> 冰藍岩坡 -> 純白大帽山霜雪頂
-                if (vy > 10.0) tmpCol.setHex(0xFFFFFF);
-                else if (vy > 3.8) tmpCol.setHex(0xCBD5E1);
-                else tmpCol.setHex(0xF1F5F9);
-            }
+            if (vy > 8.5) tmpCol.setHex(0xFFFFFF);
+            else if (vy > 3.5) tmpCol.setHex(0xCBD5E1);
+            else tmpCol.setHex(0xE2E8F0);
         }
-        colArr[i]     = tmpCol.r;
-        colArr[i + 1] = tmpCol.g;
-        colArr[i + 2] = tmpCol.b;
+        colArr[i] = tmpCol.r; colArr[i + 1] = tmpCol.g; colArr[i + 2] = tmpCol.b;
     }
     terrainGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
     terrainGeo.computeVertexNormals();
 
     const terrainMesh = new THREE.Mesh(terrainGeo, new THREE.MeshStandardMaterial({
-        vertexColors: true,
-        bumpMap: detailBumpTex,
-        bumpScale: 0.05,
-        roughness: 0.78,
-        metalness: 0.02
+        vertexColors: true, bumpMap: detailBumpTex, bumpScale: 0.05, roughness: 0.8
     }));
     terrainMesh.receiveShadow = true;
-    terrainMesh.castShadow = true;
     worldGroup.add(terrainMesh);
 
-    /* ── 5. 清澈流動十字河流網格 + 動態波光紋理 + 4 座立體木拱橋 ── */
+    // 四大高山鋪設明顯「登山石板步道」，引導學生輕鬆行上山頂任務點 ②！
+    const stepStoneGeo = new THREE.CylinderGeometry(1.1, 1.2, 0.18, 12);
+    const stepStoneMat = toyMat(0xF59E0B, 0.5, 0.25);
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+        for (let st = 0; st <= 10; st++) {
+            const t = st / 10;
+            const px = sx * THREE.MathUtils.lerp(49, 70, t);
+            const pz = sz * THREE.MathUtils.lerp(49, 70, t) + Math.sin(t * Math.PI * 2) * 2.2;
+            const stone = new THREE.Mesh(stepStoneGeo, stepStoneMat);
+            stone.position.set(px, getTerrainHeight(px, pz) + 0.04, pz);
+            stone.receiveShadow = true;
+            worldGroup.add(stone);
+        }
+    });
+
+    /* ── 5. 河流波光網格與 4 座木拱橋 ── */
     const riverFlowTex = (() => {
-        const c = document.createElement('canvas');
-        c.width = 128; c.height = 128;
+        const c = document.createElement('canvas'); c.width = 128; c.height = 128;
         const g = c.getContext('2d');
-        g.fillStyle = '#06B6D4';
-        g.fillRect(0, 0, 128, 128);
-        g.strokeStyle = 'rgba(255,255,255,0.55)';
-        g.lineWidth = 3;
+        g.fillStyle = '#06B6D4'; g.fillRect(0, 0, 128, 128);
+        g.strokeStyle = 'rgba(255,255,255,0.55)'; g.lineWidth = 3;
         for (let y = 8; y < 128; y += 24) {
-            g.beginPath();
-            g.moveTo(0, y);
-            g.bezierCurveTo(42, y - 6, 86, y + 6, 128, y);
-            g.stroke();
+            g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(42, y - 6, 86, y + 6, 128, y); g.stroke();
         }
         const t = new THREE.CanvasTexture(c);
         t.encoding = THREE.sRGBEncoding;
@@ -382,129 +330,68 @@
         t.repeat.set(3, 18);
         return t;
     })();
-
     const riverWaterMat = new THREE.MeshPhysicalMaterial({
-        map: riverFlowTex,
-        color: 0x22D3EE,
-        roughness: 0.06,
-        metalness: 0.05,
-        clearcoat: 1.0,
-        transparent: true,
-        opacity: 0.84
+        map: riverFlowTex, color: 0x22D3EE, roughness: 0.06, clearcoat: 1.0, transparent: true, opacity: 0.84
     });
 
     function buildRiverRibbon(isNS, sign) {
-        const segLen = 56;
-        const geo = new THREE.PlaneGeometry(PHYSICS.RIVER_HALF_W * 2.05, 76, 8, segLen);
+        const geo = new THREE.PlaneGeometry(PHYSICS.RIVER_HALF_W * 2.05, 76, 8, 52);
         geo.rotateX(-Math.PI / 2);
         const p = geo.attributes.position.array;
         for (let i = 0; i < p.length; i += 3) {
-            const localAcross = p[i];
-            const distFromCenter = 22 + ((p[i + 2] + 38) / 76) * 75;
-            const coord = sign * distFromCenter;
-            if (isNS) {
-                p[i]     = riverCenterX(coord) + localAcross;
-                p[i + 1] = PHYSICS.WATER_LEVEL;
-                p[i + 2] = coord;
-            } else {
-                p[i]     = coord;
-                p[i + 1] = PHYSICS.WATER_LEVEL;
-                p[i + 2] = riverCenterZ(coord) + localAcross;
-            }
+            const across = p[i];
+            const dist = 22 + ((p[i + 2] + 38) / 76) * 75;
+            const coord = sign * dist;
+            if (isNS) { p[i] = riverCenterX(coord) + across; p[i + 1] = PHYSICS.WATER_LEVEL; p[i + 2] = coord; }
+            else { p[i] = coord; p[i + 1] = PHYSICS.WATER_LEVEL; p[i + 2] = riverCenterZ(coord) + across; }
         }
         geo.computeVertexNormals();
-        const mesh = new THREE.Mesh(geo, riverWaterMat);
-        worldGroup.add(mesh);
+        worldGroup.add(new THREE.Mesh(geo, riverWaterMat));
     }
-    buildRiverRibbon(true, -1);
-    buildRiverRibbon(true,  1);
-    buildRiverRibbon(false, -1);
-    buildRiverRibbon(false,  1);
+    buildRiverRibbon(true, -1); buildRiverRibbon(true, 1);
+    buildRiverRibbon(false, -1); buildRiverRibbon(false, 1);
 
-    // 建造 4 座精緻 Switch 風格木拱橋（含橋板、石橋墩、木柱與護欄繩）
     const plankMat = toyMat(0xB45309, 0.55, 0.2);
     const railMat  = toyMat(0x78350F, 0.6, 0.18);
-    const pierMat  = toyMat(0x94A3B8, 0.7, 0.1);
-
     BRIDGES.forEach(b => {
         const bg = new THREE.Group();
-        const steps = 15;
+        const steps = 14;
         for (let s = 0; s < steps; s++) {
             const u = -1 + (s + 0.5) * (2 / steps);
             const spanPos = u * b.halfLen;
-            const baseY = THREE.MathUtils.lerp(b.baseEndA, b.baseEndB, (u + 1) * 0.5);
-            const deckY = baseY + Math.cos(u * Math.PI * 0.5) * b.archH;
+            const deckY = THREE.MathUtils.lerp(b.baseEndA, b.baseEndB, (u + 1) * 0.5) + Math.cos(u * Math.PI * 0.5) * b.archH;
             const slopeAng = (Math.PI * 0.5 / b.halfLen) * Math.sin(u * Math.PI * 0.5) * b.archH;
-
             const plank = new THREE.Mesh(
                 b.axis === 'x'
                     ? new THREE.BoxGeometry((b.halfLen * 2) / steps * 0.96, 0.22, b.halfWid * 2)
                     : new THREE.BoxGeometry(b.halfWid * 2, 0.22, (b.halfLen * 2) / steps * 0.96),
                 plankMat
             );
-            if (b.axis === 'x') {
-                plank.position.set(b.x + spanPos, deckY - 0.08, b.z);
-                plank.rotation.z = -slopeAng;
-            } else {
-                plank.position.set(b.x, deckY - 0.08, b.z + spanPos);
-                plank.rotation.x = slopeAng;
-            }
-            plank.castShadow = true;
-            plank.receiveShadow = true;
+            if (b.axis === 'x') { plank.position.set(b.x + spanPos, deckY - 0.08, b.z); plank.rotation.z = -slopeAng; }
+            else { plank.position.set(b.x, deckY - 0.08, b.z + spanPos); plank.rotation.x = slopeAng; }
+            plank.castShadow = true; plank.receiveShadow = true;
             bg.add(plank);
 
-            // 兩側護欄木柱（每 3 格立一對柱）
             if (s % 3 === 1) {
                 [-b.halfWid + 0.18, b.halfWid - 0.18].forEach(side => {
-                    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 1.25, 10), railMat);
-                    if (b.axis === 'x') post.position.set(b.x + spanPos, deckY + 0.55, b.z + side);
-                    else post.position.set(b.x + side, deckY + 0.55, b.z + spanPos);
-                    post.castShadow = true;
+                    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 1.2, 8), railMat);
+                    if (b.axis === 'x') post.position.set(b.x + spanPos, deckY + 0.52, b.z + side);
+                    else post.position.set(b.x + side, deckY + 0.52, b.z + spanPos);
                     bg.add(post);
                 });
             }
         }
-
-        // 拱形扶手橫樑與兩岸石柱橋頭堡
-        [-b.halfWid + 0.18, b.halfWid - 0.18].forEach(side => {
-            for (let seg = 0; seg < 8; seg++) {
-                const u1 = -1 + seg * 0.25, u2 = u1 + 0.25;
-                const y1 = THREE.MathUtils.lerp(b.baseEndA, b.baseEndB, (u1 + 1) * 0.5) + Math.cos(u1 * Math.PI * 0.5) * b.archH + 1.05;
-                const y2 = THREE.MathUtils.lerp(b.baseEndA, b.baseEndB, (u2 + 1) * 0.5) + Math.cos(u2 * Math.PI * 0.5) * b.archH + 1.05;
-                const midU = (u1 + u2) * 0.5;
-                const len = Math.hypot(0.25 * b.halfLen, y2 - y1);
-                const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, len, 8), toyMat(0xF59E0B, 0.4, 0.3));
-                if (b.axis === 'x') {
-                    beam.position.set(b.x + midU * b.halfLen, (y1 + y2) * 0.5, b.z + side);
-                    beam.rotation.z = Math.PI / 2 + Math.atan2(y2 - y1, 0.25 * b.halfLen);
-                } else {
-                    beam.position.set(b.x + side, (y1 + y2) * 0.5, b.z + midU * b.halfLen);
-                    beam.rotation.x = Math.PI / 2 - Math.atan2(y2 - y1, 0.25 * b.halfLen);
-                }
-                bg.add(beam);
-            }
-            [-b.halfLen, b.halfLen].forEach(endSpan => {
-                const pier = new THREE.Mesh(new THREE.BoxGeometry(0.75, 1.5, 0.75), pierMat);
-                if (b.axis === 'x') pier.position.set(b.x + endSpan, 0.45, b.z + side);
-                else pier.position.set(b.x + side, 0.45, b.z + endSpan);
-                pier.castShadow = true;
-                bg.add(pier);
-            });
-        });
         worldGroup.add(bg);
     });
 
-    /* ── 6. 碰撞盒與物理水平解算（含建築、拱橋護欄、陡峭高山滑牆） ── */
+    /* ── 6. 碰撞解算（建築物、拱橋護欄，四季高山全數開放自由攀登！） ── */
     const colliders = [];
-    function addBoxCollider(x, z, rx, rz) {
-        colliders.push({ x, z, rx, rz });
-    }
+    function addBoxCollider(x, z, rx, rz) { colliders.push({ x, z, rx, rz }); }
 
     function resolveHorizontalWorld(px, pz, currentY, radius, prevX = px, prevZ = pz) {
         let nx = THREE.MathUtils.clamp(px, -PHYSICS.WORLD_LIMIT, PHYSICS.WORLD_LIMIT);
         let nz = THREE.MathUtils.clamp(pz, -PHYSICS.WORLD_LIMIT, PHYSICS.WORLD_LIMIT);
 
-        // 1. 建築物圓角碰撞解算
         for (let i = 0; i < colliders.length; i++) {
             const c = colliders[i];
             const cx = THREE.MathUtils.clamp(nx, c.x - c.rx, c.x + c.rx);
@@ -516,269 +403,441 @@
                     const d = Math.sqrt(d2);
                     nx += (dx / d) * (radius - d);
                     nz += (dz / d) * (radius - d);
-                } else {
-                    nx = prevX; nz = prevZ;
-                }
+                } else { nx = prevX; nz = prevZ; }
             }
         }
 
-        // 2. 木拱橋護欄防墜與側面橋墩阻擋
         for (let i = 0; i < BRIDGES.length; i++) {
             const b = BRIDGES[i];
             const span = b.axis === 'x' ? (nx - b.x) : (nz - b.z);
             const lat  = b.axis === 'x' ? (nz - b.z) : (nx - b.x);
             const prevLat = b.axis === 'x' ? (prevZ - b.z) : (prevX - b.x);
-
             if (Math.abs(span) < b.halfLen - 0.35) {
-                const onBridgeNow = Math.abs(prevLat) <= b.halfWid && currentY >= 0.05;
-                if (onBridgeNow) {
-                    // 在橋面上時，兩側護欄保護玩家不掉入河中
-                    const clampedLat = THREE.MathUtils.clamp(lat, -(b.halfWid - 0.42), b.halfWid - 0.42);
-                    if (b.axis === 'x') nz = b.z + clampedLat;
-                    else nx = b.x + clampedLat;
-                } else if (currentY < 0.05 && Math.abs(lat) < b.halfWid + radius * 0.75) {
-                    // 在河道涉水時，不能直接穿過橋側護欄瞬移上橋
-                    const sign = prevLat >= 0 ? 1 : -1;
-                    const pushedLat = sign * (b.halfWid + radius * 0.76);
-                    if (b.axis === 'x') nz = b.z + pushedLat;
-                    else nx = b.x + pushedLat;
+                const onB = Math.abs(prevLat) <= b.halfWid && currentY >= 0.05;
+                if (onB) {
+                    const cLat = THREE.MathUtils.clamp(lat, -(b.halfWid - 0.4), b.halfWid - 0.4);
+                    if (b.axis === 'x') nz = b.z + cLat; else nx = b.x + cLat;
+                } else if (currentY < 0.05 && Math.abs(lat) < b.halfWid + radius * 0.72) {
+                    const sgn = prevLat >= 0 ? 1 : -1;
+                    if (b.axis === 'x') nz = b.z + sgn * (b.halfWid + radius * 0.74);
+                    else nx = b.x + sgn * (b.halfWid + radius * 0.74);
                 }
             }
         }
-
-        // 3. 高山陡壁物理阻擋與沿山腳平滑滑行
-        const onBridgeAfter = getBridgeDeckHeight(nx, nz);
-        if (!onBridgeAfter) {
-            const grad = getTerrainGradient(nx, nz);
-            if (grad.slope > PHYSICS.MAX_CLIMB_SLOPE) {
-                const pushDist = (grad.slope - PHYSICS.MAX_CLIMB_SLOPE) * 1.45;
-                nx -= (grad.gx / grad.slope) * pushDist;
-                nz -= (grad.gz / grad.slope) * pushDist;
-            }
-        }
-
         return { x: nx, z: nz };
     }
 
-    /* ── 7. 建造 5 座高飽和度 Switch 風格科學與四季地標建築 ── */
-    // (0) 中央氣象科學台
+    /* ── 7. 建造 5 座核心建築地標 ── */
     const hubTower = new THREE.Group();
     hubTower.position.set(0, getTerrainHeight(0, 0), 0);
-    const hubBase = new THREE.Mesh(new THREE.CylinderGeometry(6.4, 7.2, 1.1, 32), toyMat(0xF8FAFC, 0.35, 0.3));
-    hubBase.position.y = 0.55; hubBase.castShadow = true; hubBase.receiveShadow = true;
-    const hubMid = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 5.4, 3.6, 28), toyMat(0x0284C7, 0.32, 0.5));
-    hubMid.position.y = 2.7; hubMid.castShadow = true;
+    const hubBase = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 7.0, 1.0, 28), toyMat(0xF8FAFC, 0.35, 0.3));
+    hubBase.position.y = 0.5; hubBase.castShadow = true;
+    const hubMid = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 5.2, 3.5, 24), toyMat(0x0284C7, 0.32, 0.5));
+    hubMid.position.y = 2.6; hubMid.castShadow = true;
     const hubDome = new THREE.Mesh(
-        new THREE.SphereGeometry(4.3, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        new THREE.SphereGeometry(4.1, 22, 16, 0, Math.PI * 2, 0, Math.PI * 0.55),
         new THREE.MeshPhysicalMaterial({ color: 0xBAE6FD, roughness: 0.08, clearcoat: 1.0, transparent: true, opacity: 0.85 })
     );
-    hubDome.position.y = 4.4;
-    const hubRing = new THREE.Mesh(new THREE.TorusGeometry(4.4, 0.28, 12, 32), toyMat(0xFACC15, 0.22, 0.85, 0.45));
-    hubRing.rotation.x = Math.PI / 2; hubRing.position.y = 4.5;
+    hubDome.position.y = 4.2;
     const weatherVane = new THREE.Group();
-    weatherVane.position.y = 8.9;
-    weatherVane.add(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 2.2, 10), toyMat(0xF59E0B, 0.3, 0.6)));
+    weatherVane.position.y = 8.5;
+    weatherVane.add(new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 2.0, 10), toyMat(0xF59E0B, 0.3, 0.6)));
     for (let a = 0; a < 3; a++) {
-        const arm = new THREE.Group();
-        arm.rotation.y = (a * Math.PI * 2) / 3;
-        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 8), toyMat(0xFFFFFF, 0.3, 0.5));
-        rod.rotation.z = Math.PI / 2; rod.position.x = 0.75; arm.add(rod);
-        const cup = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), toyMat(0xEF4444, 0.25, 0.7));
-        cup.position.x = 1.5; arm.add(cup);
+        const arm = new THREE.Group(); arm.rotation.y = (a * Math.PI * 2) / 3;
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), toyMat(0xFFFFFF, 0.3, 0.5));
+        rod.rotation.z = Math.PI / 2; rod.position.x = 0.7; arm.add(rod);
+        const cup = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 10), toyMat(0xEF4444, 0.25, 0.7));
+        cup.position.x = 1.4; arm.add(cup);
         weatherVane.add(arm);
     }
-    hubTower.add(hubBase, hubMid, hubDome, hubRing, weatherVane);
+    hubTower.add(hubBase, hubMid, hubDome, weatherVane);
     worldGroup.add(hubTower);
-    addBoxCollider(0, 0, 6.5, 6.5);
+    addBoxCollider(0, 0, 6.3, 6.3);
 
-    // (1) 春季百花溫室 (-43, -43)
+    // 春花溫室 (-42, -42)
     const springHouse = new THREE.Group();
-    springHouse.position.set(-43, getTerrainHeight(-43, -43), -43);
-    const ghPlinth = new THREE.Mesh(new THREE.BoxGeometry(10.6, 0.7, 8.6), toyMat(0xEC4899, 0.4, 0.3));
-    ghPlinth.position.y = 0.35;
-    const ghBody = new THREE.Mesh(
-        new THREE.BoxGeometry(9.4, 4.4, 7.4),
-        new THREE.MeshPhysicalMaterial({ color: 0xDCFCE7, roughness: 0.08, clearcoat: 1.0, transparent: true, opacity: 0.76 })
-    );
-    ghBody.position.y = 2.8; ghBody.castShadow = true;
-    const ghRoof = new THREE.Mesh(new THREE.ConeGeometry(6.8, 3.2, 4), toyMat(0xDB2777, 0.35, 0.5));
-    ghRoof.position.y = 6.5; ghRoof.rotation.y = Math.PI / 4; ghRoof.castShadow = true;
-    springHouse.add(ghPlinth, ghBody, ghRoof);
+    springHouse.position.set(-42, getTerrainHeight(-42, -42), -42);
+    const ghBody = new THREE.Mesh(new THREE.BoxGeometry(8.8, 4.2, 7.0), new THREE.MeshPhysicalMaterial({ color: 0xDCFCE7, roughness: 0.08, clearcoat: 1.0, transparent: true, opacity: 0.76 }));
+    ghBody.position.y = 2.1; ghBody.castShadow = true;
+    const ghRoof = new THREE.Mesh(new THREE.ConeGeometry(6.4, 3.0, 4), toyMat(0xBE185D, 0.35, 0.5));
+    ghRoof.position.y = 5.6; ghRoof.rotation.y = Math.PI / 4; ghRoof.castShadow = true;
+    springHouse.add(ghBody, ghRoof);
     worldGroup.add(springHouse);
-    addBoxCollider(-43, -43, 5.4, 4.4);
+    addBoxCollider(-42, -42, 4.8, 3.9);
 
-    // (2) 夏季陽光瞭望塔 (43, -43)
+    // 夏季瞭望塔 (42, -42)
     const summerTower = new THREE.Group();
-    summerTower.position.set(43, getTerrainHeight(43, -43), -43);
-    const woodMat = toyMat(0xFEFCE8, 0.45, 0.25);
-    [[-2.1, -2.1], [2.1, -2.1], [-2.1, 2.1], [2.1, 2.1]].forEach(([lx, lz]) => {
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 5.0, 10), woodMat);
-        leg.position.set(lx, 2.5, lz); leg.castShadow = true; summerTower.add(leg);
-    });
-    const cab = new THREE.Mesh(new THREE.BoxGeometry(5.5, 3.4, 5.5), woodMat);
-    cab.position.y = 6.2; cab.castShadow = true;
-    const cabBand = new THREE.Mesh(new THREE.BoxGeometry(5.65, 0.85, 5.65), toyMat(0x0284C7, 0.3, 0.5));
-    cabBand.position.y = 5.1;
-    const cabRoof = new THREE.Mesh(new THREE.ConeGeometry(4.8, 2.6, 4), toyMat(0xEF4444, 0.32, 0.5));
-    cabRoof.position.y = 9.2; cabRoof.rotation.y = Math.PI / 4; cabRoof.castShadow = true;
-    summerTower.add(cab, cabBand, cabRoof);
+    summerTower.position.set(42, getTerrainHeight(42, -42), -42);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(5.2, 5.2, 5.2), toyMat(0xFEFCE8, 0.45, 0.25));
+    cab.position.y = 2.6; cab.castShadow = true;
+    const cabRoof = new THREE.Mesh(new THREE.ConeGeometry(4.6, 2.5, 4), toyMat(0xDC2626, 0.32, 0.5));
+    cabRoof.position.y = 6.4; cabRoof.rotation.y = Math.PI / 4; cabRoof.castShadow = true;
+    summerTower.add(cab, cabRoof);
     worldGroup.add(summerTower);
-    addBoxCollider(43, -43, 3.1, 3.1);
+    addBoxCollider(42, -42, 3.0, 3.0);
 
-    // (3) 秋季紅葉豐收穀倉 (-43, 43) & 動態營火 (-31, 33)
+    // 秋季紅葉穀倉 (-42, 42)
     const autumnBarn = new THREE.Group();
-    autumnBarn.position.set(-43, getTerrainHeight(-43, 43), 43);
-    const barnBox = new THREE.Mesh(new THREE.BoxGeometry(9.0, 5.6, 10.6), toyMat(0xDC2626, 0.48, 0.25));
-    barnBox.position.y = 2.8; barnBox.castShadow = true;
-    const barnRoof = new THREE.Mesh(new THREE.ConeGeometry(7.6, 4.2, 4), toyMat(0x78350F, 0.6, 0.18));
-    barnRoof.position.y = 7.7; barnRoof.rotation.y = Math.PI / 4; barnRoof.castShadow = true;
-    const barnDoor = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.5, 0.24), toyMat(0xFFFFFF, 0.35, 0.25));
-    barnDoor.position.set(0, 2.1, 5.32);
-    autumnBarn.add(barnBox, barnRoof, barnDoor);
+    autumnBarn.position.set(-42, getTerrainHeight(-42, 42), 42);
+    const barnBox = new THREE.Mesh(new THREE.BoxGeometry(8.4, 5.2, 9.6), toyMat(0xB91C1C, 0.48, 0.25));
+    barnBox.position.y = 2.6; barnBox.castShadow = true;
+    const barnRoof = new THREE.Mesh(new THREE.ConeGeometry(7.2, 3.8, 4), toyMat(0x78350F, 0.6, 0.18));
+    barnRoof.position.y = 7.0; barnRoof.rotation.y = Math.PI / 4; barnRoof.castShadow = true;
+    autumnBarn.add(barnBox, barnRoof);
     worldGroup.add(autumnBarn);
-    addBoxCollider(-43, 43, 4.8, 5.6);
+    addBoxCollider(-42, 42, 4.5, 5.1);
 
-    const campfire = new THREE.Group();
-    campfire.position.set(-31, getTerrainHeight(-31, 33), 33);
-    const flameOuter = new THREE.Mesh(new THREE.ConeGeometry(0.9, 2.2, 10), new THREE.MeshBasicMaterial({ color: 0xF97316 }));
-    flameOuter.position.y = 1.2;
-    const fireLight = new THREE.PointLight(0xFB923C, 1.5, 16, 2);
-    fireLight.position.y = 1.9;
-    campfire.add(flameOuter, fireLight);
-    worldGroup.add(campfire);
-    addBoxCollider(-31, 33, 1.5, 1.5);
-
-    // (4) 冬季冰雪圓頂屋 (43, 43) & 可愛雪人 (31, 33)
+    // 冬季冰雪圓頂屋 (42, 42)
     const winterIgloo = new THREE.Group();
-    winterIgloo.position.set(43, getTerrainHeight(43, 43), 43);
-    const iglooMat = toyMat(0xFFFFFF, 0.26, 0.7);
-    const iglooDome = new THREE.Mesh(new THREE.SphereGeometry(6.0, 26, 18, 0, Math.PI * 2, 0, Math.PI * 0.52), iglooMat);
+    winterIgloo.position.set(42, getTerrainHeight(42, 42), 42);
+    const iglooDome = new THREE.Mesh(new THREE.SphereGeometry(5.6, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.52), toyMat(0xFFFFFF, 0.26, 0.7));
     iglooDome.castShadow = true;
-    const iglooEnt = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.1, 3.6, 18, 1, false, 0, Math.PI), iglooMat);
-    iglooEnt.rotation.z = Math.PI / 2; iglooEnt.rotation.y = -Math.PI / 4; iglooEnt.position.set(-4.1, 0, -4.1);
-    winterIgloo.add(iglooDome, iglooEnt);
+    winterIgloo.add(iglooDome);
     worldGroup.add(winterIgloo);
-    addBoxCollider(43, 43, 6.0, 6.0);
+    addBoxCollider(42, 42, 5.6, 5.6);
 
-    const snowman = new THREE.Group();
-    snowman.position.set(31, getTerrainHeight(31, 33), 33);
-    const sm1 = new THREE.Mesh(new THREE.SphereGeometry(1.6, 18, 16), iglooMat); sm1.position.y = 1.4; sm1.castShadow = true;
-    const sm2 = new THREE.Mesh(new THREE.SphereGeometry(1.1, 18, 16), iglooMat); sm2.position.y = 3.4; sm2.castShadow = true;
-    const smScarf = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.22, 10, 20), toyMat(0xDC2626, 0.5, 0.15));
-    smScarf.rotation.x = Math.PI / 2; smScarf.position.y = 2.65;
-    snowman.add(sm1, sm2, smScarf);
-    worldGroup.add(snowman);
-    addBoxCollider(31, 33, 1.75, 1.75);
+    /* ── 8. 香港特色動植物 3D 生態建模（4 大守護物種 + 8 大本土動植物互動點） ── */
+    const guardianNodes = {};
+    const animatedButterflies = [];
+    let animatedSpoonbillHead = null;
+    let animatedDolphin = null;
+    let animatedCrabClaw = null;
+    let animatedFrog = null;
 
-    /* ── 8. 沿真實山坡地形種植四季樹木 + 漂浮雲朵 ── */
-    const tGeo = {
-        trunk: new THREE.CylinderGeometry(0.3, 0.5, 2.6, 9),
-        puff:  new THREE.SphereGeometry(1.6, 12, 10),
-        pine1: new THREE.ConeGeometry(2.2, 2.7, 10),
-        pine2: new THREE.ConeGeometry(1.65, 2.4, 10),
-        pine3: new THREE.ConeGeometry(1.1, 2.0, 10),
-        frond: new THREE.ConeGeometry(0.7, 3.1, 6)
-    };
-    const tMat = {
-        trunk: toyMat(0x78350F, 0.72, 0.1),
-        springA: toyMat(0xF472B6, 0.42, 0.3),
-        springB: toyMat(0xFBCFE8, 0.42, 0.3),
-        summer:  toyMat(0x16A34A, 0.38, 0.35),
-        autumnA: toyMat(0xEA580C, 0.45, 0.28),
-        autumnB: toyMat(0xDC2626, 0.45, 0.28),
-        pine:    toyMat(0x0F766E, 0.52, 0.2),
-        snow:    toyMat(0xFFFFFF, 0.32, 0.4)
-    };
+    // 守護物種金色召喚光柱材質
+    const beaconGeo = new THREE.CylinderGeometry(1.8, 2.2, 18, 20, 1, true);
+    function buildGuardianBase(gx, gz, labelText, accentHex) {
+        const grp = new THREE.Group();
+        const gy = getTerrainHeight(gx, gz);
+        grp.position.set(gx, gy, gz);
 
-    const swayTrees = [];
-    function trySpawnTree(x, z, season) {
-        if (getRiverInfo(x, z).dist < PHYSICS.RIVER_HALF_W + 2.5) return;
-        if (getTerrainGradient(x, z).slope > 0.65) return;
-        if (Math.hypot(Math.abs(x) - 43, Math.abs(z) - 43) < 10.5) return;
-        if (Math.hypot(Math.abs(x) - 31, Math.abs(z) - 33) < 5.5) return;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.16, 10, 32), toyMat(accentHex, 0.25, 0.8, 0.4));
+        ring.rotation.x = Math.PI / 2; ring.position.y = 0.12;
+        grp.add(ring);
 
+        const beacon = new THREE.Mesh(beaconGeo, new THREE.MeshBasicMaterial({
+            color: 0xFACC15, transparent: true, opacity: 0.22, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
+        }));
+        beacon.position.y = 9.0;
+        beacon.visible = false; // 完成該區 2 個任務點後自動亮起金色光柱！
+        grp.add(beacon);
+
+        const lbl = createLabelSprite(labelText, '#0F172A', '#FACC15', 6.2);
+        lbl.position.y = 5.4;
+        grp.add(lbl);
+
+        worldGroup.add(grp);
+        return { grp, beacon, ring };
+    }
+
+    // (G1) 🌸 春季守護：香港市花洋紫荊與採蜜鳳蝶 (-55, -32)
+    {
+        const gInfo = HK_GUARDIANS.spring;
+        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🌺 洋紫荊與鳳蝶', 0xEC4899);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.72, 3.2, 12), toyMat(0x451A03, 0.7, 0.1));
+        trunk.position.y = 1.6; trunk.castShadow = true;
+        const crown = new THREE.Mesh(new THREE.SphereGeometry(2.3, 16, 14), toyMat(0x15803D, 0.5, 0.2));
+        crown.position.y = 3.6; crown.castShadow = true;
+        grp.add(trunk, crown);
+        // 盛開五瓣紫紅洋紫荊花朵
+        const bauhiniaMat = toyMat(0xDB2777, 0.28, 0.6);
+        for (let f = 0; f < 14; f++) {
+            const ang = (f / 14) * Math.PI * 2;
+            const r = 1.85 + (f % 2) * 0.4;
+            const flower = new THREE.Mesh(new THREE.DodecahedronGeometry(0.36), bauhiniaMat);
+            flower.position.set(Math.cos(ang) * r, 3.0 + (f % 3) * 0.65, Math.sin(ang) * r);
+            grp.add(flower);
+        }
+        // 3 隻翩翩飛舞的香港藍鳳蝶
+        for (let b = 0; b < 3; b++) {
+            const bf = new THREE.Group();
+            const wL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.32), toyMat(0x38BDF8, 0.2, 0.8));
+            wL.position.x = -0.2;
+            const wR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.32), toyMat(0xFACC15, 0.2, 0.8));
+            wR.position.x = 0.2;
+            bf.add(wL, wR);
+            grp.add(bf);
+            animatedButterflies.push({ mesh: bf, wL, wR, phase: b * 2.1 });
+        }
+        guardianNodes.spring = { data: gInfo, grp, beacon };
+    }
+
+    // (G2) 🏖️ 夏季守護：南丫島深灣綠海龜 (32, -56)
+    {
+        const gInfo = HK_GUARDIANS.summer;
+        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🐢 深灣綠海龜', 0x10B981);
+        const shell = new THREE.Mesh(new THREE.SphereGeometry(1.35, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), toyMat(0x065F46, 0.32, 0.65));
+        shell.scale.set(1.0, 0.72, 1.25); shell.position.y = 0.45; shell.castShadow = true;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 12), toyMat(0x16A34A, 0.45, 0.3));
+        head.position.set(0, 0.65, 1.65);
+        [[-1.2, 0.8], [1.2, 0.8], [-1.0, -0.8], [1.0, -0.8]].forEach(([fx, fz]) => {
+            const flip = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.14, 0.42), toyMat(0x15803D, 0.45, 0.3));
+            flip.position.set(fx, 0.25, fz);
+            grp.add(flip);
+        });
+        // 沙灘海龜蛋巢保護區
+        for (let e = 0; e < 5; e++) {
+            const egg = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), toyMat(0xFEFCE8, 0.4, 0.3));
+            egg.position.set(-1.5 + (e % 3) * 0.32, 0.2, -1.4 + Math.floor(e / 3) * 0.32);
+            grp.add(egg);
+        }
+        grp.add(shell, head);
+        guardianNodes.summer = { data: gInfo, grp, beacon };
+    }
+
+    // (G3) 🦩 秋季守護：米埔濕地黑臉琵鷺 (-29, 56)
+    {
+        const gInfo = HK_GUARDIANS.autumn;
+        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🦩 米埔黑臉琵鷺', 0xF97316);
+        const whiteFeather = toyMat(0xFFFFFF, 0.35, 0.4);
+        const blackBillMat = toyMat(0x0F172A, 0.25, 0.7);
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.82, 16, 14), whiteFeather);
+        body.scale.set(0.88, 0.92, 1.35); body.position.y = 1.75; body.castShadow = true;
+        [-0.26, 0.26].forEach(lx => {
+            const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.65, 8), blackBillMat);
+            leg.position.set(lx, 0.85, 0); grp.add(leg);
+        });
+        const neckPivot = new THREE.Group();
+        neckPivot.position.set(0, 2.1, 0.65);
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.2, 10), whiteFeather);
+        neck.position.y = 0.55;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), whiteFeather);
+        head.position.y = 1.18;
+        const blackFace = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), blackBillMat);
+        blackFace.position.set(0, 1.18, 0.16);
+        // 標誌性扁闊湯匙狀「琵琶嘴」
+        const spoonShaft = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.95), blackBillMat);
+        spoonShaft.position.set(0, 1.02, 0.68); spoonShaft.rotation.x = 0.32;
+        const spoonTip = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.05, 14), blackBillMat);
+        spoonTip.position.set(0, 0.87, 1.12); spoonTip.rotation.x = 0.32;
+        neckPivot.add(neck, head, blackFace, spoonShaft, spoonTip);
+        animatedSpoonbillHead = neckPivot;
+        grp.add(body, neckPivot);
+        guardianNodes.autumn = { data: gInfo, grp, beacon };
+    }
+
+    // (G4) 🦔 冬季守護：香港中華穿山甲 (56, 30)
+    {
+        const gInfo = HK_GUARDIANS.winter;
+        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🦔 中華穿山甲', 0x6366F1);
+        const scaleMat = toyMat(0x78350F, 0.38, 0.55, 0.18);
+        // 溫暖岩石樹洞與層疊鱗片穿山甲
+        const cave = new THREE.Mesh(new THREE.DodecahedronGeometry(1.7), toyMat(0x475569, 0.8, 0.05));
+        cave.scale.set(1.2, 0.85, 1.0); cave.position.set(-0.9, 0.85, -0.8); cave.castShadow = true;
+        const pBody = new THREE.Group();
+        pBody.position.set(0.45, 0.55, 0.5);
+        for (let seg = 0; seg < 5; seg++) {
+            const sc = new THREE.Mesh(new THREE.SphereGeometry(0.58 - seg * 0.07, 14, 12), scaleMat);
+            sc.position.z = 0.5 - seg * 0.42;
+            sc.scale.y = 0.82; sc.castShadow = true;
+            pBody.add(sc);
+        }
+        const snout = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.65, 12), toyMat(0x92400E, 0.5, 0.2));
+        snout.rotation.x = Math.PI / 2; snout.position.set(0, -0.05, 1.05);
+        pBody.add(snout);
+        grp.add(cave, pBody);
+        guardianNodes.winter = { data: gInfo, grp, beacon };
+    }
+
+    // 8 個香港本土動植物生態觀察點（盧氏小樹蛙、吊鐘花、中華白海豚、招潮蟹、大欖楓香、大東山芒草、紅耳鵯、山茶花）
+    const ambientNodes = [];
+    HK_AMBIENT_SPECIES.forEach(sp => {
         const g = new THREE.Group();
-        const tr = new THREE.Mesh(tGeo.trunk, tMat.trunk);
-        tr.position.y = 1.25; tr.castShadow = true;
-        g.add(tr);
+        const gy = sp.id === 'pink_dolphin' ? PHYSICS.WATER_LEVEL : getTerrainHeight(sp.x, sp.z);
+        g.position.set(sp.x, gy, sp.z);
 
-        if (season === 'spring' || season === 'autumn') {
-            const mA = season === 'spring' ? tMat.springA : tMat.autumnA;
-            const mB = season === 'spring' ? tMat.springB : tMat.autumnB;
-            [[0, 3.4, 0, 1.05, mA], [-0.9, 2.8, 0.5, 0.76, mB], [0.9, 2.9, -0.5, 0.78, mB]].forEach(([px, py, pz, sc, m]) => {
-                const p = new THREE.Mesh(tGeo.puff, m);
-                p.position.set(px, py, pz); p.scale.setScalar(sc); p.castShadow = true;
-                g.add(p);
-            });
-        } else if (season === 'summer') {
-            tr.scale.y = 1.32; tr.position.y = 1.65;
-            for (let f = 0; f < 6; f++) {
-                const fr = new THREE.Mesh(tGeo.frond, tMat.summer);
-                const ang = (f / 6) * Math.PI * 2;
-                fr.position.set(Math.cos(ang) * 1.2, 3.55, Math.sin(ang) * 1.2);
-                fr.rotation.z = -Math.PI / 2.6; fr.rotation.y = -ang; fr.castShadow = true;
-                g.add(fr);
+        if (sp.id === 'romer_frog') {
+            const leaf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.12, 16), toyMat(0x16A34A, 0.4, 0.4));
+            leaf.position.y = 0.1;
+            const frog = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 12), toyMat(0x854D0E, 0.35, 0.6));
+            frog.scale.set(1.0, 0.8, 1.2); frog.position.y = 0.45;
+            animatedFrog = frog;
+            g.add(leaf, frog);
+        } else if (sp.id === 'bell_flower') {
+            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.3, 14, 12), toyMat(0x15803D, 0.55, 0.2));
+            bush.position.y = 1.0; g.add(bush);
+            for (let b = 0; b < 8; b++) {
+                const bell = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.38, 10), toyMat(0xF472B6, 0.3, 0.6));
+                const a = (b / 8) * Math.PI * 2;
+                bell.position.set(Math.cos(a) * 1.15, 1.1 + (b % 2) * 0.35, Math.sin(a) * 1.15);
+                g.add(bell);
             }
+        } else if (sp.id === 'pink_dolphin') {
+            // 中華白海豚（粉紅色立體海豚於水面躍動！）
+            const dol = new THREE.Group();
+            const dBody = new THREE.Mesh(new THREE.SphereGeometry(0.65, 16, 12), toyMat(0xFDA4AF, 0.2, 0.9));
+            dBody.scale.set(0.75, 0.8, 2.1);
+            const dBeak = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 10), toyMat(0xFDA4AF, 0.2, 0.9));
+            dBeak.rotation.x = Math.PI / 2; dBeak.position.z = 1.45;
+            const dFin = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.55, 6), toyMat(0xFB7185, 0.2, 0.9));
+            dFin.position.y = 0.62;
+            dol.add(dBody, dBeak, dFin);
+            g.add(dol);
+            animatedDolphin = dol;
+        } else if (sp.id === 'fiddler_crab') {
+            const cBody = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.42, 0.65), toyMat(0xDC2626, 0.35, 0.6));
+            cBody.position.y = 0.35;
+            const bigClaw = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), toyMat(0xF97316, 0.3, 0.7));
+            bigClaw.scale.set(1.4, 0.85, 0.6); bigClaw.position.set(0.65, 0.55, 0.35);
+            animatedCrabClaw = bigClaw;
+            g.add(cBody, bigClaw);
+        } else if (sp.id === 'sweet_gum') {
+            const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 3.2, 10), toyMat(0x451A03, 0.7, 0.1));
+            tr.position.y = 1.6;
+            const cr = new THREE.Mesh(new THREE.DodecahedronGeometry(2.2), toyMat(0xDC2626, 0.4, 0.35));
+            cr.position.y = 3.8;
+            g.add(tr, cr);
+        } else if (sp.id === 'silvergrass') {
+            for (let s = 0; s < 9; s++) {
+                const stalk = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.9, 8), toyMat(0xFDE047, 0.45, 0.3));
+                stalk.position.set((s % 3 - 1) * 0.65, 0.95, (Math.floor(s / 3) - 1) * 0.65);
+                g.add(stalk);
+            }
+        } else if (sp.id === 'bulbul') {
+            const perch = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.8, 8), toyMat(0x78350F, 0.7, 0.1));
+            perch.position.y = 0.9;
+            const bird = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 12), toyMat(0x451A03, 0.45, 0.3));
+            bird.position.y = 2.05;
+            const crest = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.52, 8), toyMat(0x0F172A, 0.3, 0.5));
+            crest.position.set(0, 2.55, 0.08);
+            const redCheek = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), toyMat(0xEF4444, 0.3, 0.6));
+            redCheek.position.set(0.32, 2.05, 0.22);
+            g.add(perch, bird, crest, redCheek);
         } else {
-            const p1 = new THREE.Mesh(tGeo.pine1, tMat.pine); p1.position.y = 2.5; p1.castShadow = true;
-            const p2 = new THREE.Mesh(tGeo.pine2, tMat.pine); p2.position.y = 4.0; p2.castShadow = true;
-            const p3 = new THREE.Mesh(tGeo.pine3, tMat.snow); p3.position.y = 5.3; p3.castShadow = true;
-            g.add(p1, p2, p3);
+            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.35, 14, 12), toyMat(0x064E3B, 0.5, 0.25));
+            bush.position.y = 1.0; g.add(bush);
+            for (let c = 0; c < 6; c++) {
+                const cam = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 10), toyMat(0xFFFFFF, 0.25, 0.6));
+                const a = (c / 6) * Math.PI * 2;
+                cam.position.set(Math.cos(a) * 1.15, 1.15, Math.sin(a) * 1.15);
+                g.add(cam);
+            }
         }
 
-        const sc = 0.86 + Math.random() * 0.34;
-        g.scale.setScalar(sc);
+        const lbl = createLabelSprite(`${sp.icon} ${sp.name}`, '#1E293B', '#38BDF8', 4.8);
+        lbl.position.y = 3.6;
+        g.add(lbl);
+        worldGroup.add(g);
+        ambientNodes.push({ data: sp, grp: g, cooldown: 0 });
+    });
+
+    /* ── 9. 四季各 2 個固定任務點祭壇 (共 8 個任務台：河畔 ① ＋ 山頂 ②) ── */
+    const missionNodes = [];
+    const mColors = { spring: 0xEC4899, summer: 0x0EA5E9, autumn: 0xF97316, winter: 0x6366F1 };
+
+    Object.keys(SEASON_MISSIONS).forEach(season => {
+        SEASON_MISSIONS[season].forEach(mCfg => {
+            const grp = new THREE.Group();
+            const gy = getTerrainHeight(mCfg.x, mCfg.z);
+            grp.position.set(mCfg.x, gy, mCfg.z);
+
+            const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.65, 0.65, 18), toyMat(0x1E293B, 0.4, 0.4));
+            ped.position.y = 0.32; ped.castShadow = true; ped.receiveShadow = true;
+
+            const cryMat = new THREE.MeshPhysicalMaterial({
+                color: mColors[season], roughness: 0.08, clearcoat: 1.0,
+                emissive: mColors[season], emissiveIntensity: 0.35
+            });
+            const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(1.15, 0), cryMat);
+            crystal.scale.y = 1.35; crystal.position.y = 2.3; crystal.castShadow = true;
+
+            const orbit = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.1, 10, 26), toyMat(0xFACC15, 0.2, 0.85, 0.5));
+            orbit.position.y = 2.3; orbit.rotation.x = Math.PI / 2.3;
+
+            const lbl = createLabelSprite(mCfg.label, '#0F172A', '#38BDF8', 5.4);
+            lbl.position.y = 4.3;
+
+            grp.add(ped, crystal, orbit, lbl);
+            worldGroup.add(grp);
+
+            missionNodes.push({
+                id: mCfg.id, season, idx: mCfg.idx, label: mCfg.label,
+                x: mCfg.x, z: mCfg.z, baseY: gy,
+                grp, crystal, cryMat, orbit, lbl,
+                done: false
+            });
+        });
+    });
+
+    /* ── 10. 景觀四季樹木 ── */
+    const tGeo = {
+        trunk: new THREE.CylinderGeometry(0.3, 0.5, 2.5, 8),
+        puff:  new THREE.SphereGeometry(1.55, 12, 10),
+        pine:  new THREE.ConeGeometry(1.9, 3.6, 10)
+    };
+    const tMat = {
+        trunk: toyMat(0x451A03, 0.72, 0.1),
+        spring: toyMat(0xF472B6, 0.42, 0.3),
+        summer: toyMat(0x15803D, 0.38, 0.35),
+        autumn: toyMat(0xEA580C, 0.45, 0.28),
+        winter: toyMat(0x0F766E, 0.52, 0.2)
+    };
+    const swayTrees = [];
+    function spawnTree(x, z, season) {
+        if (getRiverInfo(x, z).dist < PHYSICS.RIVER_HALF_W + 3.0) return;
+        // 避開地標、任務點與香港動植物位置
+        if (Math.hypot(Math.abs(x) - 42, Math.abs(z) - 42) < 10) return;
+        if (Math.hypot(Math.abs(x) - 72, Math.abs(z) - 72) < 8) return;
+        for (let i = 0; i < missionNodes.length; i++) {
+            if (Math.hypot(x - missionNodes[i].x, z - missionNodes[i].z) < 6.5) return;
+        }
+        const g = new THREE.Group();
+        const tr = new THREE.Mesh(tGeo.trunk, tMat.trunk); tr.position.y = 1.25; tr.castShadow = true;
+        const top = new THREE.Mesh(season === 'winter' ? tGeo.pine : tGeo.puff, tMat[season]);
+        top.position.y = season === 'winter' ? 3.2 : 3.2; top.castShadow = true;
+        g.add(tr, top);
+        g.scale.setScalar(0.85 + Math.random() * 0.35);
         g.position.set(x, getTerrainHeight(x, z) - 0.1, z);
         g.userData = { phase: Math.random() * Math.PI * 2, season };
         worldGroup.add(g);
         swayTrees.push(g);
     }
-
-    for (let i = 0; i < 46; i++) {
-        const rx = 18 + Math.random() * 68;
-        const rz = 18 + Math.random() * 68;
-        trySpawnTree(-rx, -rz, 'spring');
-        trySpawnTree( rx, -rz, 'summer');
-        trySpawnTree(-rx,  rz, 'autumn');
-        trySpawnTree( rx,  rz, 'winter');
+    for (let i = 0; i < 36; i++) {
+        const rx = 20 + Math.random() * 64, rz = 20 + Math.random() * 64;
+        spawnTree(-rx, -rz, 'spring'); spawnTree(rx, -rz, 'summer');
+        spawnTree(-rx,  rz, 'autumn'); spawnTree(rx,  rz, 'winter');
     }
 
-    // 接觸軟陰影工廠
+    /* ── 11. 深色高對比主角建模（深邃黑髮、暖古銅膚色、深海軍藍探索服、3D 金色導航箭嘴） ── */
     const blobShadowTex = (() => {
-        const c = document.createElement('canvas');
-        c.width = 64; c.height = 64;
+        const c = document.createElement('canvas'); c.width = 64; c.height = 64;
         const g = c.getContext('2d');
         const r = g.createRadialGradient(32, 32, 4, 32, 32, 30);
-        r.addColorStop(0, 'rgba(15,23,42,0.52)');
-        r.addColorStop(0.65, 'rgba(15,23,42,0.2)');
-        r.addColorStop(1, 'rgba(15,23,42,0)');
+        r.addColorStop(0, 'rgba(9,13,22,0.62)'); r.addColorStop(1, 'rgba(9,13,22,0)');
         g.fillStyle = r; g.fillRect(0, 0, 64, 64);
         return new THREE.CanvasTexture(c);
     })();
-    const blobGeo = new THREE.PlaneGeometry(1, 1);
-    blobGeo.rotateX(-Math.PI / 2);
-    function createBlobShadow(scale = 2.0) {
+    const blobGeo = new THREE.PlaneGeometry(1, 1); blobGeo.rotateX(-Math.PI / 2);
+    function createBlobShadow(sc = 2.2) {
         const m = new THREE.Mesh(blobGeo, new THREE.MeshBasicMaterial({ map: blobShadowTex, transparent: true, depthWrite: false }));
-        m.scale.set(scale, 1, scale);
-        scene.add(m);
-        return m;
+        m.scale.set(sc, 1, sc); scene.add(m); return m;
     }
 
-    /* ── 9. 高對比鮮明細緻主角建模 + 動態天氣服裝 + 6 款 3D 手提物品 ── */
     const player = new THREE.Group();
     player.position.set(0, getTerrainHeight(0, 14), 14);
     scene.add(player);
 
-    // 腳下鮮明定位光環（在濃霧、雪地或暴雨中依然清晰可見主角位置）
+    // 深色外框金心腳底光環，任何淺色雪地／沙灘下主角都極度清晰！
     const locatorRing = new THREE.Mesh(
-        new THREE.RingGeometry(0.86, 1.08, 32),
-        new THREE.MeshBasicMaterial({ color: 0xFEF08A, side: THREE.DoubleSide, transparent: true, opacity: 0.78 })
+        new THREE.RingGeometry(0.88, 1.16, 32),
+        new THREE.MeshBasicMaterial({ color: 0x0F172A, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
     );
-    locatorRing.rotation.x = -Math.PI / 2;
-    locatorRing.position.y = 0.05;
+    locatorRing.rotation.x = -Math.PI / 2; locatorRing.position.y = 0.05;
     player.add(locatorRing);
 
-    // 涉水動態漣漪環
+    // 3D 金色導航箭嘴（當完成該季 2 個任務點後亮起，明確指向香港特色動植物！）
+    const guideArrow = new THREE.Group();
+    guideArrow.position.y = 4.25;
+    const arrowShaft = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 1.15), toyMat(0xFACC15, 0.18, 0.9, 0.4));
+    arrowShaft.position.z = -0.2;
+    const arrowHead = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.95, 4), toyMat(0xEA580C, 0.2, 0.9, 0.3));
+    arrowHead.rotation.x = Math.PI / 2;
+    arrowHead.rotation.y = Math.PI / 4;
+    arrowHead.position.z = 0.78;
+    guideArrow.add(arrowShaft, arrowHead);
+    guideArrow.visible = false;
+    scene.add(guideArrow);
+
     const waterRipple = new THREE.Mesh(
         new THREE.RingGeometry(0.55, 1.25, 28),
         new THREE.MeshBasicMaterial({ color: 0xFFFFFF, side: THREE.DoubleSide, transparent: true, opacity: 0.0 })
@@ -788,501 +847,253 @@
 
     const playerVisual = new THREE.Group();
     player.add(playerVisual);
-    const playerShadow = createBlobShadow(2.25);
+    const playerShadow = createBlobShadow(2.35);
 
-    // 高對比鮮明材質（解決原本顏色太淡問題）
-    const coatMat   = toyMat(0xDC2626, 0.34, 0.45); // 預設飽和鮮紅外套
-    const trimMat   = toyMat(0xFACC15, 0.28, 0.6);  // 亮金領邊與拉鍊
-    const hatMat    = toyMat(0x1D4ED8, 0.32, 0.5);  // 飽和皇家藍探索帽
-    const hairMat   = toyMat(0x1C1917, 0.48, 0.25); // 濃黑立體髮型（與雪地／沙灘形成強烈輪廓對比）
-    const skinMat   = toyMat(0xF59E6C, 0.42, 0.2);  // 健康暖蜜桃膚色（不泛白）
-    const pantsMat  = toyMat(0x0F172A, 0.45, 0.25); // 深海軍藍長短褲
-    const shoeRedMat= toyMat(0xDC2626, 0.32, 0.55);
-    const whiteMat  = toyMat(0xFFFFFF, 0.3, 0.4);
+    // 全面加深主角配色：深藏青藍外套、深酒紅／古銅配件、濃黑頭髮、暖古銅膚色、炭黑長褲與登山靴
+    const coatMat    = toyMat(0x172554, 0.36, 0.4);  // 深藏青探索外套
+    const trimMat    = toyMat(0xD97706, 0.3, 0.55);  // 琥珀金邊飾
+    const hatMat     = toyMat(0x7F1D1D, 0.35, 0.45); // 深酒紅探索帽
+    const hairMat    = toyMat(0x09090B, 0.45, 0.25); // 純濃黑立體髮型
+    const skinMat    = toyMat(0xC67D4B, 0.42, 0.18); // 健康深暖古銅膚色（絕不泛白）
+    const pantsMat   = toyMat(0x090D16, 0.48, 0.2);  // 深炭黑長褲
+    const bootMat    = toyMat(0x27120B, 0.4, 0.45);  // 深咖啡登山靴
+    const whiteMat   = toyMat(0xF8FAFC, 0.3, 0.4);
 
-    // 上衣與天氣服裝組件（外套、雨衣下擺、羽絨蓬鬆環、保暖圍巾）
-    const torsoJacket = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.7, 1.18, 22), coatMat);
+    const torsoJacket = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.72, 1.2, 22), coatMat);
     torsoJacket.position.y = 1.42; torsoJacket.castShadow = true;
-
-    const collarRing = new THREE.Mesh(new THREE.TorusGeometry(0.54, 0.1, 10, 22), trimMat);
-    collarRing.rotation.x = Math.PI / 2; collarRing.position.y = 1.96;
-
-    const zipperStripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.12, 0.08), trimMat);
-    zipperStripe.position.set(0, 1.42, 0.63);
-
-    const raincoatSkirt = new THREE.Mesh(new THREE.ConeGeometry(0.88, 0.72, 22, 1, true), coatMat);
-    raincoatSkirt.position.y = 0.88;
-    raincoatSkirt.visible = false;
-
-    const pufferQuilt = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.13, 12, 22), coatMat);
-    pufferQuilt.rotation.x = Math.PI / 2; pufferQuilt.position.y = 1.45;
-    pufferQuilt.visible = false;
+    const collarRing = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.11, 10, 22), trimMat);
+    collarRing.rotation.x = Math.PI / 2; collarRing.position.y = 1.98;
+    const raincoatSkirt = new THREE.Mesh(new THREE.ConeGeometry(0.9, 0.72, 22, 1, true), coatMat);
+    raincoatSkirt.position.y = 0.88; raincoatSkirt.visible = false;
+    const pufferQuilt = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.14, 12, 22), coatMat);
+    pufferQuilt.rotation.x = Math.PI / 2; pufferQuilt.position.y = 1.45; pufferQuilt.visible = false;
 
     const winterScarf = new THREE.Group();
-    const scarfLoop = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.16, 12, 22), trimMat);
-    scarfLoop.rotation.x = Math.PI / 2; scarfLoop.position.y = 2.02;
-    const scarfTail = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.68, 0.12), trimMat);
-    scarfTail.position.set(0.28, 1.68, 0.58); scarfTail.rotation.z = -0.15;
-    winterScarf.add(scarfLoop, scarfTail);
-    winterScarf.visible = false;
+    const scLoop = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.16, 10, 22), trimMat);
+    scLoop.rotation.x = Math.PI / 2; scLoop.position.y = 2.02;
+    const scTail = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.68, 0.12), trimMat);
+    scTail.position.set(0.28, 1.68, 0.6);
+    winterScarf.add(scLoop, scTail); winterScarf.visible = false;
 
-    const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.66, 0.58, 0.44, 20), pantsMat);
+    const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.6, 0.45, 20), pantsMat);
     hips.position.y = 0.82; hips.castShadow = true;
 
-    // 雙色立體登山背囊＋側邊水壺袋
     const backpackGrp = new THREE.Group();
-    backpackGrp.position.set(0, 1.44, -0.58);
-    const packMain = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.88, 0.44), toyMat(0x9A3412, 0.48, 0.25));
+    backpackGrp.position.set(0, 1.44, -0.6);
+    const packMain = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.9, 0.46), toyMat(0x3B1806, 0.5, 0.25));
     packMain.castShadow = true;
-    const packFlap = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.28, 0.48), toyMat(0xF59E0B, 0.38, 0.35));
+    const packFlap = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.28, 0.5), toyMat(0x78350F, 0.4, 0.3));
     packFlap.position.y = 0.34;
-    const sideBottle = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.46, 12), toyMat(0x06B6D4, 0.2, 0.8));
-    sideBottle.position.set(-0.48, -0.1, 0);
-    backpackGrp.add(packMain, packFlap, sideBottle);
+    backpackGrp.add(packMain, packFlap);
 
-    // 精細頭部：深色立體頭髮、眉毛、大眼睛高光、立體鼻子、微笑與耳朵
     const headGrp = new THREE.Group();
-    headGrp.position.y = 2.54;
-    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.68, 24, 20), skinMat);
+    headGrp.position.y = 2.55;
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.68, 22, 18), skinMat);
     headMesh.castShadow = true;
-    headGrp.add(headMesh);
-
-    // 濃黑後髮與前瀏海、鬢角（大幅提升主角頭部辨識度）
-    const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.71, 22, 18, 0, Math.PI * 2, 0, Math.PI * 0.68), hairMat);
-    hairBack.rotation.x = -0.32;
-    headGrp.add(hairBack);
-    [-0.24, 0, 0.24].forEach((bx, idx) => {
-        const bang = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.36, 8), hairMat);
-        bang.position.set(bx, 0.38, 0.56 - Math.abs(bx) * 0.15);
-        bang.rotation.x = Math.PI * 0.88;
-        bang.rotation.z = (idx - 1) * 0.18;
+    const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.72), hairMat);
+    hairBack.rotation.x = -0.28;
+    headGrp.add(headMesh, hairBack);
+    [-0.25, 0, 0.25].forEach((bx, idx) => {
+        const bang = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.38, 8), hairMat);
+        bang.position.set(bx, 0.38, 0.56 - Math.abs(bx) * 0.14);
+        bang.rotation.x = Math.PI * 0.88; bang.rotation.z = (idx - 1) * 0.18;
         headGrp.add(bang);
     });
-    [-0.64, 0.64].forEach(ex => {
-        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 10), skinMat);
-        ear.position.set(ex, -0.02, 0.05);
-        headGrp.add(ear);
-    });
 
-    const eyeBlackMat = toyMat(0x0F172A, 0.08, 1.0);
-    const glintMat    = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+    const eyeBlackMat = toyMat(0x09090B, 0.08, 1.0);
     [-0.24, 0.24].forEach(ex => {
-        const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 12), whiteMat);
-        eyeWhite.scale.set(1.0, 1.22, 0.55);
-        eyeWhite.position.set(ex, 0.03, 0.59);
-        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.095, 12, 12), eyeBlackMat);
-        pupil.scale.y = 1.25;
-        pupil.position.set(ex, 0.03, 0.64);
-        const glint = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), glintMat);
-        glint.position.set(ex + 0.03, 0.08, 0.71);
-        const brow = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.055, 0.06), hairMat);
+        const ew = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), whiteMat);
+        ew.scale.set(1.0, 1.2, 0.55); ew.position.set(ex, 0.03, 0.59);
+        const ep = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 10), eyeBlackMat);
+        ep.scale.y = 1.25; ep.position.set(ex, 0.03, 0.64);
+        const brow = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.065, 0.06), hairMat);
         brow.position.set(ex, 0.24, 0.62);
-        brow.rotation.z = ex < 0 ? 0.08 : -0.08;
-        headGrp.add(eyeWhite, pupil, glint, brow);
+        headGrp.add(ew, ep, brow);
     });
-    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 10), toyMat(0xEA580C, 0.5, 0.2));
-    nose.position.set(0, -0.04, 0.68);
-    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.03, 8, 14, Math.PI), toyMat(0x991B1B, 0.4, 0.2));
-    smile.rotation.x = Math.PI;
-    smile.position.set(0, -0.14, 0.63);
-    [-0.4, 0.4].forEach(cx => {
-        const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 10), toyMat(0xFB7185, 0.55, 0.1));
-        cheek.scale.set(1.2, 0.7, 0.4);
-        cheek.position.set(cx, -0.09, 0.58);
-        headGrp.add(cheek);
-    });
-    headGrp.add(nose, smile);
 
-    // 4 款天氣帽飾：探索太陽帽 (cap)、闊邊防曬草帽 (sunhat)、連帽雨衣帽 (rainhood)、毛線絨球冷帽 (beanie)
+    // 4 款深色系天氣帽飾
     const capGroup = new THREE.Group();
-    const capDome = new THREE.Mesh(new THREE.SphereGeometry(0.73, 22, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), hatMat);
+    const capDome = new THREE.Mesh(new THREE.SphereGeometry(0.74, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), hatMat);
     capDome.position.y = 0.08;
-    const capBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.74, 0.78, 0.09, 20, 1, false, -Math.PI * 0.42, Math.PI * 0.84), hatMat);
+    const capBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.79, 0.09, 18, 1, false, -Math.PI * 0.42, Math.PI * 0.84), hatMat);
     capBrim.position.set(0, 0.12, 0.28);
     capGroup.add(capDome, capBrim);
 
     const sunHatGroup = new THREE.Group();
-    const shTop = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.68, 0.48, 22), hatMat);
-    shTop.position.y = 0.46;
-    const shBrim = new THREE.Mesh(new THREE.CylinderGeometry(1.18, 1.22, 0.08, 26), hatMat);
-    shBrim.position.y = 0.24;
-    const shRibbon = new THREE.Mesh(new THREE.TorusGeometry(0.64, 0.07, 8, 22), toyMat(0xEF4444, 0.4, 0.3));
-    shRibbon.rotation.x = Math.PI / 2; shRibbon.position.y = 0.29;
-    sunHatGroup.add(shTop, shBrim, shRibbon);
-    sunHatGroup.visible = false;
+    const shTop = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.68, 0.48, 20), hatMat); shTop.position.y = 0.46;
+    const shBrim = new THREE.Mesh(new THREE.CylinderGeometry(1.18, 1.22, 0.08, 24), hatMat); shBrim.position.y = 0.24;
+    sunHatGroup.add(shTop, shBrim); sunHatGroup.visible = false;
 
     const rainHoodGroup = new THREE.Group();
-    const rhShell = new THREE.Mesh(new THREE.SphereGeometry(0.77, 22, 18, 0, Math.PI * 2, 0, Math.PI * 0.68), hatMat);
+    const rhShell = new THREE.Mesh(new THREE.SphereGeometry(0.78, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.68), hatMat);
     rhShell.rotation.x = -0.22; rhShell.position.y = 0.04;
-    const rhVisor = new THREE.Mesh(new THREE.TorusGeometry(0.68, 0.07, 10, 22, Math.PI * 1.1), trimMat);
-    rhVisor.position.set(0, 0.1, 0.22);
-    rainHoodGroup.add(rhShell, rhVisor);
-    rainHoodGroup.visible = false;
+    rainHoodGroup.add(rhShell); rainHoodGroup.visible = false;
 
     const beanieGroup = new THREE.Group();
-    const bnDome = new THREE.Mesh(new THREE.SphereGeometry(0.74, 22, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), hatMat);
-    bnDome.position.y = 0.08;
-    const bnCuff = new THREE.Mesh(new THREE.TorusGeometry(0.69, 0.12, 10, 24), whiteMat);
-    bnCuff.rotation.x = Math.PI / 2; bnCuff.position.y = 0.14;
-    const bnPom = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 14), whiteMat);
-    bnPom.position.y = 0.88;
-    beanieGroup.add(bnDome, bnCuff, bnPom);
-    beanieGroup.visible = false;
+    const bnDome = new THREE.Mesh(new THREE.SphereGeometry(0.75, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), hatMat); bnDome.position.y = 0.08;
+    const bnPom = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 12), trimMat); bnPom.position.y = 0.88;
+    beanieGroup.add(bnDome, bnPom); beanieGroup.visible = false;
 
     headGrp.add(capGroup, sunHatGroup, rainHoodGroup, beanieGroup);
 
-    // 榮譽解鎖飾品（太陽眼鏡、英雄披風、四季皇冠）
     const gearGlasses = new THREE.Group();
-    const lensM = toyMat(0x0F172A, 0.06, 1.0, 0.65);
+    const lensM = toyMat(0x09090B, 0.06, 1.0, 0.65);
     const gL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.1), lensM); gL.position.set(-0.24, 0.05, 0.69);
     const gR = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.1), lensM); gR.position.set( 0.24, 0.05, 0.69);
-    const gB = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.06, 0.08), trimMat); gB.position.set(0, 0.07, 0.7);
-    gearGlasses.add(gL, gR, gB);
-    gearGlasses.visible = false;
+    gearGlasses.add(gL, gR); gearGlasses.visible = false;
     headGrp.add(gearGlasses);
 
     const gearCrown = new THREE.Group();
     const crBand = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.42, 0.36, 16), toyMat(0xFACC15, 0.18, 0.9, 0.7));
     crBand.position.y = 0.92;
-    const crGem = new THREE.Mesh(new THREE.OctahedronGeometry(0.15), toyMat(0xEF4444, 0.1, 1.0));
-    crGem.position.set(0, 0.94, 0.44);
-    gearCrown.add(crBand, crGem);
-    gearCrown.visible = false;
+    gearCrown.add(crBand); gearCrown.visible = false;
     headGrp.add(gearCrown);
 
-    const gearCape = new THREE.Mesh(new THREE.BoxGeometry(1.22, 1.5, 0.08), toyMat(0x7C3AED, 0.4, 0.35));
-    gearCape.position.set(0, 1.24, -0.66);
-    gearCape.visible = false;
+    const gearCape = new THREE.Mesh(new THREE.BoxGeometry(1.24, 1.5, 0.08), toyMat(0x7F1D1D, 0.4, 0.35));
+    gearCape.position.set(0, 1.24, -0.66); gearCape.visible = false;
 
-    // 鮮明衣袖四肢與紅白厚底運動鞋
     function makeArm(side) {
-        const pivot = new THREE.Group();
-        pivot.position.set(side * 0.76, 1.82, 0);
-        const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.44, 12), coatMat);
-        sleeve.position.y = -0.18; sleeve.castShadow = true;
-        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.14, 0.36, 12), skinMat);
-        forearm.position.y = -0.48;
-        const hand = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 12), skinMat);
-        hand.position.y = -0.68;
-        pivot.add(sleeve, forearm, hand);
-        return { pivot, hand };
-    }
-    function makeLeg(side) {
-        const pivot = new THREE.Group();
-        pivot.position.set(side * 0.31, 0.72, 0);
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.16, 0.54, 12), pantsMat);
-        leg.position.y = -0.26; leg.castShadow = true;
-        const shoeTop = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 12), shoeRedMat);
-        shoeTop.scale.set(0.96, 0.72, 1.38); shoeTop.position.set(0, -0.54, 0.09); shoeTop.castShadow = true;
-        const sole = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.11, 0.64), whiteMat);
-        sole.position.set(0, -0.64, 0.09);
-        pivot.add(leg, shoeTop, sole);
+        const pivot = new THREE.Group(); pivot.position.set(side * 0.78, 1.82, 0);
+        const slv = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.18, 0.46, 12), coatMat); slv.position.y = -0.19; slv.castShadow = true;
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.14, 0.34, 12), skinMat); arm.position.y = -0.48;
+        const hnd = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 10), skinMat); hnd.position.y = -0.68;
+        pivot.add(slv, arm, hnd);
         return pivot;
     }
+    function makeLeg(side) {
+        const pivot = new THREE.Group(); pivot.position.set(side * 0.31, 0.72, 0);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.54, 12), pantsMat); leg.position.y = -0.26; leg.castShadow = true;
+        const boot = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), bootMat);
+        boot.scale.set(0.96, 0.76, 1.38); boot.position.set(0, -0.55, 0.09); boot.castShadow = true;
+        pivot.add(leg, boot);
+        return pivot;
+    }
+    const leftArm = makeArm(-1), rightArm = makeArm(1);
+    const leftLeg = makeLeg(-1), rightLeg = makeLeg(1);
 
-    const leftArmObj  = makeArm(-1);
-    const rightArmObj = makeArm(1);
-    const leftLeg     = makeLeg(-1);
-    const rightLeg    = makeLeg(1);
-
-    // ── 右手 6 款 3D 天氣手提物品掛載點 (Hand-Held Props) ──
+    // 3D 手提物品掛載點
     const propSocket = new THREE.Group();
     propSocket.position.set(0, -0.68, 0.12);
-    rightArmObj.pivot.add(propSocket);
-
+    rightArm.add(propSocket);
     const propsMap = {};
 
-    // (a) 🔍 生態觀察放大鏡
-    const pMagnifier = new THREE.Group();
-    const mgHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.55, 10), toyMat(0x78350F, 0.5, 0.3));
-    mgHandle.rotation.x = Math.PI / 2; mgHandle.position.z = 0.25;
-    const mgRim = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.06, 10, 22), toyMat(0xFACC15, 0.25, 0.8, 0.6));
-    mgRim.position.set(0, 0.08, 0.68);
-    const mgGlass = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.04, 20), new THREE.MeshPhysicalMaterial({ color: 0xBAE6FD, roughness: 0.05, clearcoat: 1.0, transparent: true, opacity: 0.68 }));
-    mgGlass.rotation.x = Math.PI / 2; mgGlass.position.set(0, 0.08, 0.68);
-    pMagnifier.add(mgHandle, mgRim, mgGlass);
-    propsMap.magnifier = pMagnifier;
+    const pMag = new THREE.Group();
+    const mgH = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.55, 10), bootMat); mgH.rotation.x = Math.PI / 2; mgH.position.z = 0.25;
+    const mgR = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.06, 10, 20), toyMat(0xD97706, 0.25, 0.8, 0.6)); mgR.position.set(0, 0.08, 0.68);
+    pMag.add(mgH, mgR); propsMap.magnifier = pMag;
 
-    // (b) ☂️ 撐開的立體彩色雨傘
-    const pUmbrella = new THREE.Group();
-    const umShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.25, 10), whiteMat);
-    umShaft.position.set(-0.25, 1.05, 0.15);
-    const umCanopy = new THREE.Mesh(new THREE.ConeGeometry(1.55, 0.72, 12), toyMat(0xFACC15, 0.3, 0.6));
-    umCanopy.position.set(-0.25, 2.15, 0.15);
-    umCanopy.castShadow = true;
-    const umTop = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 10), toyMat(0xEF4444, 0.3, 0.6));
-    umTop.position.set(-0.25, 2.54, 0.15);
-    pUmbrella.add(umShaft, umCanopy, umTop);
-    propsMap.umbrella = pUmbrella;
+    const pUmb = new THREE.Group();
+    const umS = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.25, 8), whiteMat); umS.position.set(-0.25, 1.05, 0.15);
+    const umC = new THREE.Mesh(new THREE.ConeGeometry(1.55, 0.72, 12), toyMat(0xDC2626, 0.3, 0.6)); umC.position.set(-0.25, 2.15, 0.15);
+    pUmb.add(umS, umC); propsMap.umbrella = pUmb;
 
-    // (c) 🔦 防水應急手電筒（含立體發光體積光束 Cone + 點光源）
-    const pFlashlight = new THREE.Group();
-    const flBody = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.58, 14), toyMat(0xFACC15, 0.25, 0.7));
-    flBody.rotation.x = Math.PI / 2; flBody.position.z = 0.25;
-    const flHead = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.13, 0.18, 14), toyMat(0x0F172A, 0.3, 0.6));
-    flHead.rotation.x = Math.PI / 2; flHead.position.z = 0.58;
-    const flBeam = new THREE.Mesh(
-        new THREE.ConeGeometry(1.35, 5.2, 20, 1, true),
-        new THREE.MeshBasicMaterial({ color: 0xFEF08A, transparent: true, opacity: 0.24, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
-    );
-    flBeam.rotation.x = -Math.PI / 2;
-    flBeam.position.z = 3.25;
-    const flLight = new THREE.PointLight(0xFEF08A, 1.35, 14, 2);
-    flLight.position.set(0, 0.2, 2.2);
-    pFlashlight.add(flBody, flHead, flBeam, flLight);
-    propsMap.flashlight = pFlashlight;
+    const pFlash = new THREE.Group();
+    const flB = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.58, 12), toyMat(0xD97706, 0.25, 0.7)); flB.rotation.x = Math.PI / 2; flB.position.z = 0.25;
+    const flBeam = new THREE.Mesh(new THREE.ConeGeometry(1.3, 5.0, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xFEF08A, transparent: true, opacity: 0.24, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+    flBeam.rotation.x = -Math.PI / 2; flBeam.position.z = 3.1;
+    pFlash.add(flB, flBeam); propsMap.flashlight = pFlash;
 
-    // (d) 🌀 夏日便攜冰涼小風扇（扇葉會高速旋轉！）
     const pFan = new THREE.Group();
-    const fnGrip = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.48, 12), toyMat(0x06B6D4, 0.3, 0.6));
-    fnGrip.position.set(0, 0.18, 0.35);
-    const fnRing = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.045, 10, 20), whiteMat);
-    fnRing.position.set(0, 0.52, 0.35);
-    const fanBlades = new THREE.Group();
-    fanBlades.position.set(0, 0.52, 0.38);
+    const fnG = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.075, 0.48, 10), toyMat(0x0284C7, 0.3, 0.6)); fnG.position.set(0, 0.18, 0.35);
+    const fanBlades = new THREE.Group(); fanBlades.position.set(0, 0.5, 0.38);
     for (let b = 0; b < 3; b++) {
-        const bl = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.24, 0.02), toyMat(0x38BDF8, 0.2, 0.8));
-        bl.rotation.z = (b * Math.PI * 2) / 3;
-        bl.position.set(Math.cos(bl.rotation.z + Math.PI / 2) * 0.1, Math.sin(bl.rotation.z + Math.PI / 2) * 0.1, 0);
-        fanBlades.add(bl);
+        const bl = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.24, 0.02), whiteMat);
+        bl.rotation.z = (b * Math.PI * 2) / 3; fanBlades.add(bl);
     }
-    pFan.add(fnGrip, fnRing, fanBlades);
-    propsMap.fan = pFan;
+    pFan.add(fnG, fanBlades); propsMap.fan = pFan;
 
-    // (e) 🔭 秋日觀鳥雙筒望遠鏡
-    const pBinoculars = new THREE.Group();
-    const binoMat = toyMat(0x1E293B, 0.32, 0.6, 0.3);
+    const pBino = new THREE.Group();
     [-0.16, 0.16].forEach(bx => {
-        const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.52, 14), binoMat);
-        tube.rotation.x = Math.PI / 2; tube.position.set(bx, 0.06, 0.36);
-        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.04, 14), toyMat(0x38BDF8, 0.05, 1.0));
-        lens.rotation.x = Math.PI / 2; lens.position.set(bx, 0.06, 0.63);
-        pBinoculars.add(tube, lens);
+        const tb = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 0.5, 12), pantsMat);
+        tb.rotation.x = Math.PI / 2; tb.position.set(bx, 0.06, 0.36); pBino.add(tb);
     });
-    propsMap.binoculars = pBinoculars;
+    propsMap.binoculars = pBino;
 
-    // (f) 🥤 保溫暖水壺
-    const pThermos = new THREE.Group();
-    const thBody = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.68, 16), toyMat(0xEF4444, 0.25, 0.85, 0.35));
-    thBody.position.set(0, 0.15, 0.32);
-    const thCap = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.18, 16), whiteMat);
-    thCap.position.set(0, 0.54, 0.32);
-    pThermos.add(thBody, thCap);
-    propsMap.thermos = pThermos;
+    const pTherm = new THREE.Group();
+    const thB = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.68, 14), toyMat(0x991B1B, 0.25, 0.85));
+    thB.position.set(0, 0.15, 0.32); pTherm.add(thB);
+    propsMap.thermos = pTherm;
 
-    // (g) 🏮 嚴寒發光溫暖手提營燈
-    const pLantern = new THREE.Group();
-    const lnHook = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.03, 8, 16, Math.PI), toyMat(0x1E293B, 0.3, 0.6));
-    lnHook.position.set(0, 0.0, 0.35);
-    const lnTop = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.22, 12), toyMat(0xDC2626, 0.3, 0.6));
-    lnTop.position.set(0, -0.14, 0.35);
-    const lnCore = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.38, 14), new THREE.MeshBasicMaterial({ color: 0xFEF08A }));
-    lnCore.position.set(0, -0.4, 0.35);
-    const lnLight = new THREE.PointLight(0xFBBF24, 1.4, 13, 2);
-    lnLight.position.set(0, -0.4, 0.5);
-    pLantern.add(lnHook, lnTop, lnCore, lnLight);
-    propsMap.lantern = pLantern;
+    const pLant = new THREE.Group();
+    const lnC = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.4, 12), new THREE.MeshBasicMaterial({ color: 0xFEF08A }));
+    lnC.position.set(0, -0.35, 0.35);
+    const lnLight = new THREE.PointLight(0xFBBF24, 1.3, 12, 2); lnLight.position.set(0, -0.35, 0.5);
+    pLant.add(lnC, lnLight); propsMap.lantern = pLant;
 
-    Object.keys(propsMap).forEach(k => {
-        propsMap[k].visible = (k === 'magnifier');
-        propSocket.add(propsMap[k]);
-    });
+    Object.keys(propsMap).forEach(k => { propsMap[k].visible = (k === 'magnifier'); propSocket.add(propsMap[k]); });
 
-    playerVisual.add(
-        torsoJacket, collarRing, zipperStripe, raincoatSkirt, pufferQuilt, winterScarf,
-        hips, backpackGrp, gearCape, headGrp,
-        leftArmObj.pivot, rightArmObj.pivot, leftLeg, rightLeg
-    );
-
-    // 換裝閃亮星光特效粒子環
-    const burstGroup = new THREE.Group();
-    burstGroup.visible = false;
-    player.add(burstGroup);
-    for (let i = 0; i < 10; i++) {
-        const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), toyMat(0xFEF08A, 0.1, 1.0));
-        const ang = (i / 10) * Math.PI * 2;
-        star.userData = { ang };
-        burstGroup.add(star);
-    }
-    let burstTimer = 0;
+    playerVisual.add(torsoJacket, collarRing, raincoatSkirt, pufferQuilt, winterScarf, hips, backpackGrp, gearCape, headGrp, leftArm, rightArm, leftLeg, rightLeg);
+    player.scale.setScalar(1.08);
 
     let activePropKey = 'magnifier';
     function applyWeatherOutfit(outfit) {
         coatMat.color.setHex(outfit.coat);
         trimMat.color.setHex(outfit.trim);
         hatMat.color.setHex(outfit.hatCol);
-
         raincoatSkirt.visible = (outfit.style === 'raincoat');
         pufferQuilt.visible   = (outfit.style === 'puffer' || outfit.style === 'puffer_scarf');
         winterScarf.visible   = (outfit.style === 'puffer_scarf');
-
         if (!gearCrown.visible) {
-            capGroup.visible      = (outfit.hat === 'cap');
-            sunHatGroup.visible   = (outfit.hat === 'sunhat');
+            capGroup.visible = (outfit.hat === 'cap');
+            sunHatGroup.visible = (outfit.hat === 'sunhat');
             rainHoodGroup.visible = (outfit.hat === 'rainhood');
-            beanieGroup.visible   = (outfit.hat === 'beanie');
+            beanieGroup.visible = (outfit.hat === 'beanie');
         }
-
         activePropKey = outfit.prop;
-        Object.keys(propsMap).forEach(k => {
-            propsMap[k].visible = (k === activePropKey);
-        });
-
-        burstTimer = 1.1;
-        burstGroup.visible = true;
+        Object.keys(propsMap).forEach(k => { propsMap[k].visible = (k === activePropKey); });
     }
 
-    /* ── 10. 任務寶石與百厭小猴子（自動貼合 3D 山坡地面、避開河流與陡崖） ── */
-    const treasures = [];
-    const gemColors = { spring: 0xEC4899, summer: 0x0EA5E9, autumn: 0xF97316, winter: 0x6366F1 };
-    const gemGlows = {
-        spring: createGlowTex('rgba(236,72,153,0.85)', 'rgba(236,72,153,0)'),
-        summer: createGlowTex('rgba(14,165,233,0.85)', 'rgba(14,165,233,0)'),
-        autumn: createGlowTex('rgba(249,115,22,0.85)', 'rgba(249,115,22,0)'),
-        winter: createGlowTex('rgba(99,102,241,0.85)', 'rgba(99,102,241,0)')
-    };
-
-    function relocateGem(item) {
-        for (let tries = 0; tries < 45; tries++) {
-            let rx = 18 + Math.random() * 56;
-            let rz = 18 + Math.random() * 56;
-            if (item.season === 'spring' || item.season === 'autumn') rx = -rx;
-            if (item.season === 'spring' || item.season === 'summer') rz = -rz;
-
-            if (getRiverInfo(rx, rz).dist < PHYSICS.RIVER_HALF_W + 2.8) continue;
-            if (getTerrainGradient(rx, rz).slope > 0.52) continue;
-            const solved = resolveHorizontalWorld(rx, rz, 1.0, 2.2);
-            if (Math.hypot(solved.x - rx, solved.z - rz) > 0.15) continue;
-
-            const gy = getTerrainHeight(rx, rz);
-            item.baseY = gy;
-            item.mesh.position.set(rx, gy + 2.0, rz);
-            item.shadow.position.set(rx, gy + 0.06, rz);
-            item.active = true;
-            item.mesh.visible = true;
-            item.shadow.visible = true;
-            return;
-        }
-        const fx = (item.season === 'spring' || item.season === 'autumn') ? -28 : 28;
-        const fz = (item.season === 'spring' || item.season === 'summer') ? -28 : 28;
-        const gy = getTerrainHeight(fx, fz);
-        item.baseY = gy;
-        item.mesh.position.set(fx, gy + 2.0, fz);
-        item.shadow.position.set(fx, gy + 0.06, fz);
-        item.active = true; item.mesh.visible = true; item.shadow.visible = true;
-    }
-
-    ['spring', 'summer', 'autumn', 'winter'].forEach(season => {
-        for (let k = 0; k < 3; k++) {
-            const g = new THREE.Group();
-            const cry = new THREE.Mesh(
-                new THREE.OctahedronGeometry(1.15, 0),
-                new THREE.MeshPhysicalMaterial({
-                    color: gemColors[season], roughness: 0.06, clearcoat: 1.0,
-                    emissive: gemColors[season], emissiveIntensity: 0.28
-                })
-            );
-            cry.scale.y = 1.35; cry.castShadow = true;
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(1.55, 0.09, 10, 26), toyMat(0xFEF08A, 0.2, 0.8, 0.5));
-            ring.rotation.x = Math.PI / 2.3;
-            const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-                map: gemGlows[season], transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
-            }));
-            glow.scale.set(4.5, 4.5, 1);
-            g.add(cry, ring, glow);
-            scene.add(g);
-            const shadow = createBlobShadow(1.85);
-            const item = { mesh: g, ring, shadow, season, active: true, baseY: 0.25, phase: Math.random() * Math.PI * 2 };
-            relocateGem(item);
-            treasures.push(item);
-        }
-    });
-
-    // 4 隻百厭小猴子
+    /* ── 12. 4 隻百厭小猴子（額外趣味科學挑戰，答對送香蕉加速衝刺！） ── */
     const monkeys = [];
-    const furMat = toyMat(0x92400E, 0.55, 0.2);
+    const furMat = toyMat(0x78350F, 0.55, 0.2);
     const faceMat = toyMat(0xFDE68A, 0.48, 0.2);
-
-    function makeAlertSprite() {
-        const c = document.createElement('canvas'); c.width = 64; c.height = 64;
-        const g = c.getContext('2d');
-        g.fillStyle = '#FEF08A'; g.beginPath(); g.arc(32, 32, 26, 0, Math.PI * 2); g.fill();
-        g.lineWidth = 5; g.strokeStyle = '#DC2626'; g.stroke();
-        g.fillStyle = '#DC2626'; g.font = '900 36px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillText('!', 32, 34);
-        const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true }));
-        sp.scale.set(1.25, 1.25, 1); sp.position.y = 3.1; sp.visible = false;
-        return sp;
-    }
-
     [
-        { season: 'spring', xMin: -72, xMax: -14, zMin: -72, zMax: -14, sx: -30, sz: -24 },
-        { season: 'summer', xMin:  14, xMax:  72, zMin: -72, zMax: -14, sx:  30, sz: -24 },
-        { season: 'autumn', xMin: -72, xMax: -14, zMin:  14, zMax:  72, sx: -30, sz:  24 },
-        { season: 'winter', xMin:  14, xMax:  72, zMin:  14, zMax:  72, sx:  30, sz:  24 }
+        { season: 'spring', xMin: -68, xMax: -16, zMin: -68, zMax: -16, sx: -25, sz: -24 },
+        { season: 'summer', xMin:  16, xMax:  68, zMin: -68, zMax: -16, sx:  25, sz: -24 },
+        { season: 'autumn', xMin: -68, xMax: -16, zMin:  16, zMax:  68, sx: -25, sz:  24 },
+        { season: 'winter', xMin:  16, xMax:  68, zMin:  16, zMax:  68, sx:  25, sz:  24 }
     ].forEach(z => {
         const mg = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.62, 16, 14), furMat);
-        body.scale.y = 1.15; body.position.y = 1.05; body.castShadow = true;
-        const belly = new THREE.Mesh(new THREE.SphereGeometry(0.46, 12, 12), faceMat);
-        belly.position.set(0, 1.02, 0.28);
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.56, 16, 14), furMat);
-        head.position.y = 2.02; head.castShadow = true;
-        const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 12), faceMat);
-        muzzle.scale.set(1.1, 0.85, 0.75); muzzle.position.set(0, 1.92, 0.42);
-        [-0.55, 0.55].forEach(ex => {
-            const ear = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), furMat);
-            ear.position.set(ex, 2.05, 0); mg.add(ear);
-        });
-        [-0.17, 0.17].forEach(ex => {
-            const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeBlackMat);
-            eye.position.set(ex, 2.08, 0.5); mg.add(eye);
-        });
-        const banana = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.09, 8, 14, Math.PI * 0.85), toyMat(0xFACC15, 0.3, 0.5));
-        banana.position.set(0.56, 1.25, 0.34);
-        const alertBadge = makeAlertSprite();
-        mg.add(body, belly, head, muzzle, banana, alertBadge);
-
-        const gy = getTerrainHeight(z.sx, z.sz);
-        mg.position.set(z.sx, gy, z.sz);
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 14, 12), furMat);
+        body.scale.y = 1.15; body.position.y = 1.0; body.castShadow = true;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.54, 14, 12), furMat);
+        head.position.y = 1.95; head.castShadow = true;
+        const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), faceMat);
+        muzzle.position.set(0, 1.88, 0.4);
+        mg.add(body, head, muzzle);
+        mg.position.set(z.sx, getTerrainHeight(z.sx, z.sz), z.sz);
         scene.add(mg);
-        const sh = createBlobShadow(1.65);
-
-        monkeys.push({
-            mesh: mg, shadow: sh, alertBadge, zone: z, season: z.season,
-            dirAngle: Math.random() * Math.PI * 2, changeTimer: 1.5, cooldown: 0, hopPhase: Math.random() * Math.PI * 2
-        });
+        const sh = createBlobShadow(1.6);
+        monkeys.push({ mesh: mg, shadow: sh, zone: z, season: z.season, dirAngle: Math.random() * Math.PI * 2, changeTimer: 1.5, cooldown: 0, hopPhase: Math.random() * Math.PI * 2 });
     });
 
-    /* ── 11. 統一動態天氣粒子系統（支援花瓣、濃霧、春雨、陽光星塵、狂風暴雨、紅葉、飄雪） ── */
-    const PARTICLE_COUNT = 420;
+    /* ── 13. 天氣粒子系統 ── */
+    const PARTICLE_COUNT = 380;
     const pGeo = new THREE.BufferGeometry();
     const pPos = new Float32Array(PARTICLE_COUNT * 3);
     const pSeeds = new Float32Array(PARTICLE_COUNT);
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-        pPos[i * 3]     = (Math.random() - 0.5) * 90;
-        pPos[i * 3 + 1] = Math.random() * 32;
-        pPos[i * 3 + 2] = (Math.random() - 0.5) * 90;
+        pPos[i * 3] = (Math.random() - 0.5) * 110;
+        pPos[i * 3 + 1] = Math.random() * 36;
+        pPos[i * 3 + 2] = (Math.random() - 0.5) * 110;
         pSeeds[i] = Math.random() * Math.PI * 2;
     }
     pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
-    const pMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.48, transparent: true, opacity: 0.86 });
-    const weatherPoints = new THREE.Points(pGeo, pMat);
+    const weatherPoints = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: 0xFFFFFF, size: 0.5, transparent: true, opacity: 0.85 }));
     weatherPoints.visible = false;
     scene.add(weatherPoints);
 
     const P_MODES = {
-        petals:      { color: 0xF9A8D4, size: 0.54, fall:  3.0, flutter: 1.9, op: 0.9 },
-        mist:        { color: 0xF8FAFC, size: 1.35, fall:  0.7, flutter: 1.2, op: 0.42 },
-        rain:        { color: 0xBAE6FD, size: 0.36, fall: 19.5, flutter: 0.0, op: 0.85 },
-        sun_sparkle: { color: 0xFEF08A, size: 0.42, fall:  0.9, flutter: 1.5, op: 0.72 },
-        storm:       { color: 0xE0F2FE, size: 0.44, fall: 27.0, flutter: 0.4, op: 0.95 },
+        petals:      { color: 0xF472B6, size: 0.55, fall:  3.0, flutter: 1.8, op: 0.9 },
+        mist:        { color: 0xF8FAFC, size: 1.4,  fall:  0.7, flutter: 1.1, op: 0.42 },
+        rain:        { color: 0xBAE6FD, size: 0.38, fall: 19.5, flutter: 0.0, op: 0.85 },
+        sun_sparkle: { color: 0xFEF08A, size: 0.44, fall:  0.9, flutter: 1.4, op: 0.72 },
+        storm:       { color: 0xE0F2FE, size: 0.46, fall: 27.0, flutter: 0.4, op: 0.95 },
         leaves:      { color: 0xFB923C, size: 0.58, fall:  4.2, flutter: 2.2, op: 0.92 },
-        leaves_fast: { color: 0xEA580C, size: 0.62, fall:  5.8, flutter: 3.4, op: 0.94 },
-        snow_light:  { color: 0xFFFFFF, size: 0.42, fall:  2.8, flutter: 1.3, op: 0.82 },
+        leaves_fast: { color: 0xEA580C, size: 0.62, fall:  5.8, flutter: 3.2, op: 0.94 },
+        snow_light:  { color: 0xFFFFFF, size: 0.44, fall:  2.8, flutter: 1.3, op: 0.82 },
         snow:        { color: 0xFFFFFF, size: 0.52, fall:  4.4, flutter: 1.8, op: 0.92 },
-        blizzard:    { color: 0xF8FAFC, size: 0.62, fall:  7.2, flutter: 2.8, op: 0.96 }
+        blizzard:    { color: 0xF8FAFC, size: 0.62, fall:  7.0, flutter: 2.6, op: 0.96 }
     };
 
     GameApp.World = {
@@ -1290,25 +1101,37 @@
         LANDMARKS, BRIDGES, MOUNTAIN_PEAKS,
         riverCenterX, riverCenterZ, getRiverInfo,
         getTerrainHeight, getTerrainGradient, getBridgeDeckHeight, resolveHorizontalWorld,
-        riverFlowTex, weatherVane, flameOuter, fireLight, swayTrees,
-        player, playerVisual, playerShadow, locatorRing, waterRipple,
+        riverFlowTex, weatherVane, swayTrees,
+        player, playerVisual, playerShadow, waterRipple, guideArrow,
         coatMat, hatMat, capGroup, sunHatGroup, rainHoodGroup, beanieGroup,
         gearGlasses, gearCape, gearCrown,
-        leftArm: leftArmObj.pivot, rightArm: rightArmObj.pivot, leftLeg, rightLeg,
+        leftArm, rightArm, leftLeg, rightLeg,
         fanBlades, applyWeatherOutfit, getActiveProp: () => activePropKey,
-        updateBurst(dt) {
-            if (burstTimer > 0) {
-                burstTimer -= dt;
-                const prog = 1 - burstTimer / 1.1;
-                burstGroup.children.forEach(st => {
-                    const r = 0.8 + prog * 2.2;
-                    st.position.set(Math.cos(st.userData.ang + prog * 4) * r, 1.4 + Math.sin(prog * Math.PI) * 1.3, Math.sin(st.userData.ang + prog * 4) * r);
-                    st.scale.setScalar(Math.max(0.01, 1 - prog));
-                });
-                if (burstTimer <= 0) burstGroup.visible = false;
+        missionNodes, guardianNodes, ambientNodes, monkeys,
+        updateEcologyAnim(elapsed) {
+            animatedButterflies.forEach((bf, idx) => {
+                const a = elapsed * 2.2 + bf.phase;
+                bf.mesh.position.set(Math.cos(a) * 2.7, 3.2 + Math.sin(a * 2) * 0.5, Math.sin(a) * 2.7);
+                bf.mesh.rotation.y = -a;
+                const flap = Math.sin(elapsed * 16 + idx) * 0.65;
+                bf.wL.rotation.z = flap; bf.wR.rotation.z = -flap;
+            });
+            if (animatedSpoonbillHead) {
+                animatedSpoonbillHead.rotation.y = Math.sin(elapsed * 2.4) * 0.55;
+            }
+            if (animatedDolphin) {
+                const jumpPhase = (elapsed * 1.6) % (Math.PI * 2);
+                const h = Math.max(0, Math.sin(jumpPhase)) * 2.6;
+                animatedDolphin.position.y = -0.35 + h;
+                animatedDolphin.rotation.x = -Math.cos(jumpPhase) * 0.55;
+            }
+            if (animatedCrabClaw) {
+                animatedCrabClaw.position.y = 0.55 + Math.abs(Math.sin(elapsed * 5.0)) * 0.25;
+            }
+            if (animatedFrog) {
+                animatedFrog.position.y = 0.45 + Math.max(0, Math.sin(elapsed * 4.5)) * 0.45;
             }
         },
-        treasures, relocateGem, monkeys,
         weatherPoints, pSeeds, PARTICLE_COUNT, P_MODES,
         setHighQuality(hq) {
             renderer.setPixelRatio(hq ? Math.min(window.devicePixelRatio || 1, 2) : 1);
