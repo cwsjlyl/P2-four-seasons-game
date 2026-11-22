@@ -1,5 +1,5 @@
 /* =========================================================================
-   四季小探險家 3D — 寶可夢徽章進度、香港動植物箭嘴導航、廣角鏡頭與物理主循環
+   四季小探險家 3D — 寶可夢徽章進度、30秒自動轉天氣、無殘留文字與物理主循環
    ========================================================================= */
 (() => {
     'use strict';
@@ -28,16 +28,16 @@
         onBridge: false,
         inWater: false,
         walkCycle: 0,
-        // 四季各 2 個任務點與寶可夢式大獎章狀態
         seasonProgress: {
             spring: { mDone: [false, false], grandBadge: false },
             summer: { mDone: [false, false], grandBadge: false },
             autumn: { mDone: [false, false], grandBadge: false },
             winter: { mDone: [false, false], grandBadge: false }
         },
-        // 動態天氣（95 秒舒適間隔，答對只換外觀，不計獎章）
+        // 約每 30 秒自動轉變天氣（答對只換外觀，不計獎章）
         weatherIdx: { spring: 0, summer: 0, autumn: 0, winter: 0 },
         weatherTimer: PHYSICS.WEATHER_CYCLE_SEC,
+        lastCountdownSec: 30,
         lightningCooldown: 5.0,
         splashCooldown: 0,
         guardianHintCooldown: 0,
@@ -51,6 +51,7 @@
     const physBadgeEl    = document.getElementById('phys-badge');
     const outfitBadgeEl  = document.getElementById('outfit-badge');
     const staminaFillEl  = document.getElementById('stamina-fill');
+    const simWeatherBtn  = document.getElementById('sim-weather-btn');
     const zoneShortEl    = document.getElementById('minimap-zone-short');
     const missionBannerEl= document.getElementById('mission-banner');
     const toastEl        = document.getElementById('weather-toast');
@@ -59,8 +60,38 @@
     const toastDescEl    = document.getElementById('weather-toast-desc');
     const flashEl        = document.getElementById('lightning-flash');
 
+    // 自動淡出隱藏橫幅與提示，確保完成任務後絕不殘留任何文字在畫面中！
+    let bannerTimer = null;
+    function showBanner(text, duration = 5000) {
+        if (bannerTimer) clearTimeout(bannerTimer);
+        toastEl.classList.remove('show');
+        missionBannerEl.textContent = text;
+        missionBannerEl.style.display = 'block';
+        requestAnimationFrame(() => { missionBannerEl.style.opacity = '1'; });
+        bannerTimer = setTimeout(() => {
+            missionBannerEl.style.opacity = '0';
+            setTimeout(() => {
+                if (missionBannerEl.style.opacity === '0') missionBannerEl.style.display = 'none';
+            }, 420);
+        }, duration);
+    }
+
+    function clearAllBanners() {
+        if (bannerTimer) clearTimeout(bannerTimer);
+        missionBannerEl.style.opacity = '0';
+        missionBannerEl.style.display = 'none';
+        missionBannerEl.textContent = '';
+        if (toastTimer) clearTimeout(toastTimer);
+        toastEl.classList.remove('show');
+    }
+
     let toastTimer = null;
-    function showToast(icon, title, desc, duration = 5000) {
+    function showToast(icon, title, desc, duration = 4500) {
+        if (bannerTimer) {
+            clearTimeout(bannerTimer);
+            missionBannerEl.style.opacity = '0';
+            missionBannerEl.style.display = 'none';
+        }
         toastIconEl.textContent  = icon;
         toastTitleEl.textContent = title;
         toastDescEl.textContent  = desc;
@@ -84,29 +115,28 @@
             slot.classList.toggle('ready-guardian', bothDone && !prog.grandBadge);
             slot.classList.toggle('unlocked', prog.grandBadge);
 
-            // 同步香港守護動植物金色召喚光柱
-            World.guardianNodes[s].beacon.visible = (bothDone && !prog.grandBadge);
+            const gNode = World.guardianNodes[s];
+            gNode.beacon.visible = (bothDone && !prog.grandBadge);
+            if (prog.grandBadge) {
+                // 該季大獎章完成後隱藏守護物種的懸浮任務名牌，保持畫面乾淨
+                gNode.lbl.visible = false;
+            }
         });
 
-        const totalGrand = countGrandBadges();
-        if (totalGrand >= 4) {
+        if (countGrandBadges() >= 4) {
             document.getElementById('cert-open-btn').style.display = 'inline-flex';
-            missionBannerEl.textContent = '🏆 恭喜集齊春、夏、秋、冬四枚香港生態大獎章！可隨時領取榮譽證書！';
-            missionBannerEl.style.opacity = '1';
+            showBanner('🏆 恭喜集齊春、夏、秋、冬四枚香港生態大獎章！可隨時點擊左上「🎓 證書」！', 6500);
         }
         refreshWardrobeLocks();
     }
 
-    // 尋找目前已完成 2 個任務點、等待前往香港特色動植物領取大獎章的目標（供 3D 金色箭嘴指向）
     function getActiveArrowTarget() {
-        // 優先指向當前所在園區已解鎖的香港特色動植物
         if (state.seasonProgress[state.currentZone]) {
             const curP = state.seasonProgress[state.currentZone];
             if (curP.mDone[0] && curP.mDone[1] && !curP.grandBadge) {
                 return World.guardianNodes[state.currentZone].data;
             }
         }
-        // 否則檢查其他已完成 2 個任務點但未領取大獎章的季節
         const seasons = ['spring', 'summer', 'autumn', 'winter'];
         for (let i = 0; i < seasons.length; i++) {
             const s = seasons[i];
@@ -123,7 +153,7 @@
         return WEATHER_STATES[zone][state.weatherIdx[zone]];
     }
 
-    /* ── 2. 右上方半透明虛擬雷達地圖（顯示建築物、任務點 ①②、香港動植物、小橋、猴子） ── */
+    /* ── 2. 右上方半透明虛擬雷達地圖 ── */
     const miniCanvas = document.getElementById('minimap-canvas');
     const mctx = miniCanvas.getContext('2d');
     const MW = miniCanvas.width, MH = miniCanvas.height;
@@ -196,14 +226,13 @@
 
         const pulse = 1 + Math.sin(elapsed * 5.0) * 0.22;
 
-        // 1. 繪製每季 2 個任務點（未完成：亮藍閃爍菱形；已完成：翠綠小點）
         World.missionNodes.forEach(mn => {
             const mp = worldToMini(mn.x, mn.z);
             mctx.save();
             mctx.translate(mp.x, mp.y);
             if (mn.done) {
                 mctx.fillStyle = '#22C55E';
-                mctx.beginPath(); mctx.arc(0, 0, 4, 0, Math.PI * 2); mctx.fill();
+                mctx.beginPath(); mctx.arc(0, 0, 3.8, 0, Math.PI * 2); mctx.fill();
             } else {
                 mctx.rotate(Math.PI / 4);
                 const sz = 5.2 * pulse;
@@ -216,7 +245,6 @@
             mctx.restore();
         });
 
-        // 2. 繪製 4 大香港守護動植物位置（當 2/2 任務完成時以金色大光環閃爍指引！）
         ['spring', 'summer', 'autumn', 'winter'].forEach(s => {
             const gData = World.guardianNodes[s].data;
             const prog = state.seasonProgress[s];
@@ -238,7 +266,6 @@
             mctx.stroke();
         });
 
-        // 3. 小猴子動態圓點
         World.monkeys.forEach(mk => {
             const mp = worldToMini(mk.mesh.position.x, mk.mesh.position.z);
             mctx.beginPath(); mctx.arc(mp.x, mp.y, 5.2, 0, Math.PI * 2);
@@ -246,7 +273,6 @@
             mctx.lineWidth = 1.8; mctx.strokeStyle = '#78350F'; mctx.stroke();
         });
 
-        // 4. 玩家箭頭與廣角視野扇形
         const pp = worldToMini(World.player.position.x, World.player.position.z);
         const lookAng = Math.atan2(-Math.sin(state.camYaw), -Math.cos(state.camYaw)) - Math.PI / 2;
         mctx.save();
@@ -266,7 +292,7 @@
         mctx.restore();
     }
 
-    /* ── 3. 四類問答系統：任務點題（小徽章）、香港守護動植物題（大獎章）、天氣題（純換外觀）、小猴子題（加速獎勵） ── */
+    /* ── 3. 問答互動系統 ── */
     const quizModal    = document.getElementById('quiz-modal');
     const quizCard     = document.getElementById('quiz-card');
     const qSeasonTag   = document.getElementById('q-season-tag');
@@ -389,7 +415,7 @@
 
     function openWeatherQuiz(zone, weatherObj) {
         AudioSys.playWeatherSFX(weatherObj.sfx);
-        showToast(weatherObj.icon, `${SEASON_META[zone].short}天氣轉變：${weatherObj.name}`, weatherObj.alert, 6000);
+        showToast(weatherObj.icon, `${SEASON_META[zone].short}天氣轉變：${weatherObj.name}`, weatherObj.alert, 4200);
         mountQuiz({
             kind: 'weather',
             season: zone,
@@ -433,8 +459,13 @@
             if (kind === 'mission') {
                 AudioSys.playCorrect();
                 payload.done = true;
+                // 完成該任務點後立即隱藏懸浮標籤與光環，避免畫面殘留文字！
+                payload.lbl.visible = false;
+                payload.orbit.visible = false;
+                payload.crystal.scale.setScalar(0.55);
                 payload.cryMat.color.setHex(0x22C55E);
                 payload.cryMat.emissive.setHex(0x16A34A);
+
                 state.seasonProgress[season].mDone[payload.idx] = true;
                 refreshBadgeCaseUI();
 
@@ -445,26 +476,31 @@
                     feedbackTitle.textContent = `🎉 完成本區 2 個任務點！金色導航箭嘴已開啟！`;
                     feedbackExp.textContent = `💡 ${qObj.exp} 現在請跟隨頭頂【金色箭嘴】前往「${gData.name}」互動贏取大獎章！`;
                     quizNextBtn.textContent = '🧭 跟隨金色箭嘴出發！';
-                    missionBannerEl.textContent = `🧭 ${gData.prompt}`;
-                    missionBannerEl.style.opacity = '1';
-                    SpeechSys.speakSingle(`答啱喇！你已經完成呢一區兩個任務點，快啲跟住頭頂嘅金色箭嘴去搵${gData.name.slice(2)}互動，領取大獎章啦！`);
+                    showBanner(`🧭 ${gData.prompt}`, 5500);
+                    SpeechSys.speakSingle(`答啱喇！快啲跟住頭頂嘅金色箭嘴去搵${gData.name.slice(2)}互動，領取大獎章啦！`);
                 } else {
+                    clearAllBanners();
                     feedbackTitle.textContent = `🎉 獲得「${payload.label}」小徽章！`;
                     feedbackExp.textContent = `💡 科學小知識：${qObj.exp}`;
                     quizNextBtn.textContent = '🎉 繼續前往下一個任務點！';
                     SpeechSys.speakSingle(`答啱喇，獲得一枚小徽章！${qObj.exp}`);
                 }
             } else if (kind === 'guardian') {
+                // 完成季節大獎章任務後，徹底清除所有頂部與中央提示文字！
+                clearAllBanners();
                 AudioSys.playBadgeUnlock();
                 state.seasonProgress[season].grandBadge = true;
+                payload.lbl.visible = false;
+                payload.beacon.visible = false;
                 refreshBadgeCaseUI();
+
                 const gData = payload.data;
                 feedbackTitle.textContent = `🏅 恭喜獲得寶可夢級【${gData.badgeName}】！`;
                 feedbackExp.textContent = `🌟 ${qObj.exp}`;
                 quizNextBtn.textContent = countGrandBadges() >= 4 ? '🎓 集齊四大獎章，領取證書！' : '🏅 收下大獎章，繼續探索！';
                 SpeechSys.speakSingle(qObj.exp);
             } else if (kind === 'weather') {
-                // 天氣題答對：只更換角色衣著與手提物品，不發放獎章！
+                clearAllBanners();
                 AudioSys.playCorrect();
                 World.applyWeatherOutfit(payload.outfit);
                 outfitBadgeEl.textContent = `🧥 ${payload.outfit.label}`;
@@ -512,9 +548,13 @@
     function closeQuizModal() {
         SpeechSys.stop();
         quizModal.style.display = 'none';
-        const justFinishedGame = state.activeQuiz && state.activeQuiz.kind === 'guardian' && state.activeQuiz.solved && countGrandBadges() >= 4;
+        const wasGuardianDone = state.activeQuiz && state.activeQuiz.kind === 'guardian' && state.activeQuiz.solved;
+        const finishedAll = wasGuardianDone && countGrandBadges() >= 4;
+        if (wasGuardianDone && !finishedAll) {
+            clearAllBanners();
+        }
         state.activeQuiz = null;
-        if (justFinishedGame) openCertModal();
+        if (finishedAll) openCertModal();
         else state.paused = false;
     }
 
@@ -527,7 +567,7 @@
         closeQuizModal();
     });
 
-    /* ── 4. 視野縮放控制（遠景／全景／標準 + 滑鼠滾輪縮放）與天氣切換 ── */
+    /* ── 4. 視野縮放與約 30 秒天氣自動變化控制 ── */
     const zoomBtn = document.getElementById('zoom-btn');
     zoomBtn.addEventListener('click', () => {
         state.zoomIdx = (state.zoomIdx + 1) % ZOOM_MODES.length;
@@ -541,10 +581,10 @@
         state.camDist = THREE.MathUtils.clamp(state.camDist + e.deltaY * 0.02, 16.0, 42.0);
     }, { passive: true });
 
-    document.getElementById('sim-weather-btn').addEventListener('click', () => {
+    simWeatherBtn.addEventListener('click', () => {
         if (!state.started || state.paused) return;
         if (!WEATHER_STATES[state.currentZone]) {
-            showToast('🧭', '請先進入春、夏、秋、冬園區', '走過木拱橋或步道進入季節園區即可轉換天氣！');
+            showToast('🧭', '請先進入春、夏、秋、冬園區', '走過木拱橋或步道進入季節園區即可體驗天氣轉變！', 3500);
             return;
         }
         advanceWeather(true);
@@ -553,12 +593,15 @@
     function advanceWeather(currentOnly = false) {
         if (currentOnly && WEATHER_STATES[state.currentZone]) {
             state.weatherIdx[state.currentZone] = (state.weatherIdx[state.currentZone] + 1) % WEATHER_STATES[state.currentZone].length;
+            state.weatherTimer = PHYSICS.WEATHER_CYCLE_SEC;
         } else {
             ['spring', 'summer', 'autumn', 'winter'].forEach(z => {
                 state.weatherIdx[z] = (state.weatherIdx[z] + 1) % WEATHER_STATES[z].length;
             });
+            // 若玩家正好站在中央科學廣場，保留短倒數讓踏入季節園區後隨即感受天氣變化
+            state.weatherTimer = WEATHER_STATES[state.currentZone] ? PHYSICS.WEATHER_CYCLE_SEC : 4.0;
         }
-        state.weatherTimer = PHYSICS.WEATHER_CYCLE_SEC;
+
         const curW = getCurrentZoneWeather(state.currentZone);
         if (curW && !state.paused) {
             weatherBadgeEl.textContent = `${curW.icon} ${curW.name}`;
@@ -652,7 +695,7 @@
     window.addEventListener('pointerup', endCam);
     window.addEventListener('pointercancel', endCam);
 
-    /* ── 6. 深色系換裝室與四季生態大獎章證書 ── */
+    /* ── 6. 換裝室與榮譽證書 ── */
     const darkShirtCols = [0x172554, 0x14532D, 0x7F1D1D, 0x581C87, 0x78350F, 0x0F172A];
     const darkHatCols   = [0x7F1D1D, 0x1E3A8A, 0x064E3B, 0x451A03, 0x312E81, 0x18181B];
 
@@ -740,7 +783,6 @@
         ctx.fillStyle = '#0F172A'; ctx.font = '900 46px "Noto Sans TC", sans-serif';
         ctx.fillText(`${cls} 班　${stu} 同學`, W / 2, 260);
 
-        // 繪製四枚已解鎖寶可夢風格榮譽徽章圖示列
         const badges = [
             { x: 240, col: '#DB2777', lbl: '🌺 紫荊大獎章' },
             { x: 395, col: '#0284C7', lbl: '🐢 綠龜大獎章' },
@@ -765,6 +807,7 @@
 
     function openCertModal() {
         state.paused = true;
+        clearAllBanners();
         AudioSys.playBadgeUnlock();
         drawCert();
         certModal.style.display = 'flex';
@@ -797,9 +840,11 @@
         document.getElementById('start-overlay').style.display = 'none';
         state.started = true;
         refreshBadgeCaseUI();
+        // 開場任務橫幅 5 秒後自動淡出並完全隱藏，不再停留畫面中央
+        showBanner('🎯 完成各季 2 個任務台（①、②），再跟金色箭嘴找香港特色動植物贏取 4 枚大獎章！', 5000);
     });
 
-    /* ── 7. 主物理、登山力學、香港動植物互動與 3D 箭嘴導航循環 ── */
+    /* ── 7. 主物理、30 秒天氣計時、距離動態標籤顯示與主渲染循環 ── */
     const clock = new THREE.Clock();
     const targetSky = new THREE.Color(SEASON_META.plaza.sky);
     const targetFog = new THREE.Color(SEASON_META.plaza.fog);
@@ -841,8 +886,13 @@
             if (state.speedBoostTimer > 0) state.speedBoostTimer -= dt;
             if (state.guardianHintCooldown > 0) state.guardianHintCooldown -= dt;
 
-            // 1. 舒適節奏天氣自動變化（每 95 秒才轉變一次，不打斷探索！）
+            // 1. 約 30 秒自動轉變一次天氣（並在按鈕同步顯示剩餘秒數）
             state.weatherTimer -= dt;
+            const secLeft = Math.max(0, Math.ceil(state.weatherTimer));
+            if (secLeft !== state.lastCountdownSec) {
+                state.lastCountdownSec = secLeft;
+                simWeatherBtn.textContent = `🌦️ 轉天氣 (${secLeft}s)`;
+            }
             if (state.weatherTimer <= 0) {
                 advanceWeather(false);
             }
@@ -857,7 +907,7 @@
                 }
             }
 
-            // 2. 讀取輸入與登山運動物理（上山輕鬆順暢不倒退！）
+            // 2. 讀取輸入與登山運動物理
             let rawX = input.joyX, rawZ = input.joyY;
             if (input.keys['KeyW'] || input.keys['ArrowUp'])    rawZ -= 1;
             if (input.keys['KeyS'] || input.keys['ArrowDown'])  rawZ += 1;
@@ -888,7 +938,6 @@
                 state.vz += wishZ * accel * dt;
             }
 
-            // 涉水與地面摩擦
             const rvNow = World.getRiverInfo(prevX, prevZ);
             state.inWater = (!bridgeNow && World.player.position.y < PHYSICS.WATER_LEVEL - 0.05 && rvNow.mask > 0.25);
             if (state.inWater) {
@@ -909,7 +958,6 @@
                 }
             }
 
-            // 上坡自然微調極速（上大斜坡約 88% 速度，真實且保證輕鬆登頂！）
             const uphillDot = wishX * grad.gx + wishZ * grad.gz;
             const slopeSpeedFactor = uphillDot > 0 ? Math.max(0.84, 1 - uphillDot * 0.22) : 1.04;
             const baseMax = hasBoost ? PHYSICS.SPRINT_SPEED * 1.15 : (wantsSprint ? PHYSICS.SPRINT_SPEED : PHYSICS.WALK_SPEED);
@@ -925,7 +973,6 @@
             World.player.position.x = solved.x;
             World.player.position.z = solved.z;
 
-            // 垂直貼地與跳躍（上下山坡緊貼地面不浮空）
             const terrainY = World.getTerrainHeight(solved.x, solved.z);
             const bridgeAfter = World.getBridgeDeckHeight(solved.x, solved.z);
             const supportY = bridgeAfter ? Math.max(terrainY, bridgeAfter.y) : terrainY;
@@ -946,7 +993,6 @@
                 state.isGrounded = true;
             }
 
-            // 陰影與涉水漣漪
             const airH = Math.max(0, World.player.position.y - supportY);
             const shF = Math.max(0.35, 1.0 - airH * 0.2);
             World.playerShadow.position.set(solved.x, supportY + 0.05, solved.z);
@@ -961,13 +1007,12 @@
                 World.waterRipple.material.opacity = 0;
             }
 
-            // 3. 3D 金色導航箭嘴（完成該季 2 個任務點後，指向該季香港特色動植物！）
+            // 3. 3D 金色導航箭嘴
             const arrowTarget = getActiveArrowTarget();
             if (arrowTarget) {
                 World.guideArrow.visible = true;
                 World.guideArrow.position.set(solved.x, World.player.position.y + 4.3 + Math.sin(elapsed * 5.0) * 0.25, solved.z);
-                const angToTarget = Math.atan2(arrowTarget.x - solved.x, arrowTarget.z - solved.z);
-                World.guideArrow.rotation.y = angToTarget;
+                World.guideArrow.rotation.y = Math.atan2(arrowTarget.x - solved.x, arrowTarget.z - solved.z);
             } else {
                 World.guideArrow.visible = false;
             }
@@ -1020,49 +1065,51 @@
             const surfLbl = state.onBridge ? '🌉 木拱橋' : (state.inWater ? '🌊 河道涉水' : SEASON_META[state.currentZone].surface);
             physBadgeEl.textContent = `📐 海拔 ${World.player.position.y.toFixed(1)}m｜${surfLbl}`;
 
-            // 6. 檢測每季 2 個固定任務點觸發
+            // 6. 任務點觸發與距離動態標籤（已完成的任務點永不顯示文字，遠處標籤亦自動收起）
             for (let i = 0; i < World.missionNodes.length; i++) {
                 const mn = World.missionNodes[i];
                 mn.crystal.rotation.y += dt * 1.8;
                 mn.orbit.rotation.z += dt * 2.2;
                 mn.crystal.position.y = 2.3 + Math.sin(elapsed * 3.0 + i) * 0.25;
-                if (!mn.done) {
-                    const d = Math.hypot(solved.x - mn.x, solved.z - mn.z);
-                    if (d < 2.8 && Math.abs(World.player.position.y - mn.baseY) < 3.0 && !state.paused) {
-                        openMissionQuiz(mn);
-                        break;
-                    }
+                const d = Math.hypot(solved.x - mn.x, solved.z - mn.z);
+                mn.lbl.visible = (!mn.done && d < 36.0);
+                if (!mn.done && d < 2.8 && Math.abs(World.player.position.y - mn.baseY) < 3.0 && !state.paused) {
+                    openMissionQuiz(mn);
+                    break;
                 }
             }
 
-            // 7. 檢測 4 大香港守護動植物互動（完成該季 2 個任務點後觸發大獎章互動！）
+            // 7. 4 大香港守護動植物互動（完成該季大獎章後自動收起文字標籤）
             if (!state.paused) {
                 ['spring', 'summer', 'autumn', 'winter'].forEach(s => {
                     const gNode = World.guardianNodes[s];
                     const gd = gNode.data;
                     const prog = state.seasonProgress[s];
                     const d = Math.hypot(solved.x - gd.x, solved.z - gd.z);
+                    gNode.lbl.visible = (!prog.grandBadge && d < 36.0);
+
                     if (d < 3.4) {
                         if (prog.mDone[0] && prog.mDone[1] && !prog.grandBadge) {
                             openGuardianQuiz(gNode);
                         } else if (!prog.grandBadge && state.guardianHintCooldown <= 0) {
-                            state.guardianHintCooldown = 8.0;
-                            showToast('🧭', gd.name, `請先完成本區 2 個任務台（① 及 ② 山頂），再回來領取【${gd.badgeName}】！`, 4800);
+                            state.guardianHintCooldown = 9.0;
+                            showToast('🧭', gd.name, `請先完成本區 2 個任務台（① 及 ② 山頂），再回來領取【${gd.badgeName}】！`, 4200);
                             SpeechSys.speakSingle(`${gd.intro} 請先完成呢一區兩個任務台，再返嚟搵我領取大獎章啦！`);
                         }
                     }
                 });
             }
 
-            // 8. 檢測 8 個額外香港本土動植物趣味生態導賞
+            // 8. 8 個香港本土動植物趣味導賞（走近 18m 內才顯示小名牌）
             for (let i = 0; i < World.ambientNodes.length; i++) {
                 const an = World.ambientNodes[i];
                 if (an.cooldown > 0) an.cooldown -= dt;
                 const d = Math.hypot(solved.x - an.data.x, solved.z - an.data.z);
-                if (d < 3.6 && an.cooldown <= 0 && !state.paused) {
-                    an.cooldown = 26.0;
+                an.lbl.visible = (d < 18.0);
+                if (d < 3.5 && an.cooldown <= 0 && !state.paused) {
+                    an.cooldown = 30.0;
                     AudioSys.playWeatherSFX('birds');
-                    showToast(an.data.icon, `香港生態發現：${an.data.name}`, an.data.fact, 5600);
+                    showToast(an.data.icon, `香港生態發現：${an.data.name}`, an.data.fact, 4500);
                     SpeechSys.speakSingle(`發現香港特色物種：${an.data.name}！${an.data.fact}`);
                 }
             }

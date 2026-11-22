@@ -11,7 +11,6 @@
     scene.background = new THREE.Color(SEASON_META.plaza.sky);
     scene.fog = new THREE.FogExp2(SEASON_META.plaza.fog, SEASON_META.plaza.fogD);
 
-    // 廣角鏡頭 (FOV 58°)，讓學生在 iPad 看到更廣闊的地圖與遠山目標
     const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.35, 360);
 
     const renderer = new THREE.WebGLRenderer({
@@ -70,7 +69,8 @@
         return t;
     }
 
-    function createLabelSprite(text, bgHex = '#0F172A', borderHex = '#FACC15', widthScale = 5.4) {
+    // 開啟 depthTest: true，避免遠處標籤穿透山體或殘留懸浮於畫面中央！
+    function createLabelSprite(text, bgHex = '#0F172A', borderHex = '#FACC15', widthScale = 5.0) {
         const c = document.createElement('canvas');
         c.width = 384; c.height = 96;
         const g = c.getContext('2d');
@@ -82,15 +82,19 @@
         g.fill();
         g.stroke();
         g.fillStyle = '#FFFFFF';
-        g.font = '900 30px "Noto Sans TC", sans-serif';
+        g.font = '900 29px "Noto Sans TC", sans-serif';
         g.textAlign = 'center';
         g.textBaseline = 'middle';
         g.fillText(text, 192, 49);
         const tex = new THREE.CanvasTexture(c);
         tex.encoding = THREE.sRGBEncoding;
-        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: tex,
+            transparent: true,
+            depthTest: true,
+            depthWrite: false
+        }));
         sp.scale.set(widthScale, widthScale * 0.25, 1);
-        sp.renderOrder = 10;
         return sp;
     }
 
@@ -122,13 +126,11 @@
     function riverCenterX(z) { return Math.sin(z * 0.08) * 3.0; }
     function riverCenterZ(x) { return Math.sin(x * 0.08) * 3.0; }
 
-    // 精心設計的可攀登四季主峰（sigma 寬廣平緩，最大坡度約 24°–28°，主角可輕鬆直登山頂任務點 ②！）
     const MOUNTAIN_PEAKS = [
         { x: -72, z: -72, h: 13.5, sigma: 18.5, season: 'spring', high: true, name: '櫻花山' },
         { x:  72, z: -72, h: 13.0, sigma: 18.5, season: 'summer', high: true, name: '望海山' },
         { x: -72, z:  72, h: 14.2, sigma: 18.5, season: 'autumn', high: true, name: '大東芒草山' },
         { x:  72, z:  72, h: 15.6, sigma: 19.2, season: 'winter', high: true, name: '大帽霜峰' },
-        // 連綿副峰丘陵（皆可自由行走攀爬）
         { x: -82, z: -46, h: 6.5, sigma: 13.0, season: 'spring', high: false },
         { x:  82, z: -46, h: 6.0, sigma: 13.0, season: 'summer', high: false },
         { x: -82, z:  46, h: 6.8, sigma: 13.0, season: 'autumn', high: false },
@@ -172,10 +174,8 @@
             const dx = x - m.x, dz = z - m.z;
             const d2 = dx * dx + dz * dz;
             if (d2 < m.sigma * m.sigma * 6.5) {
-                // 山頂微平觀景台設計（方便學生站立於山頂答題觀景）
                 const rawBell = Math.exp(-d2 / (2 * m.sigma * m.sigma));
-                const flatTopBell = Math.min(0.94, rawBell);
-                h += m.h * flatTopBell;
+                h += m.h * Math.min(0.94, rawBell);
             }
         }
 
@@ -300,7 +300,6 @@
     terrainMesh.receiveShadow = true;
     worldGroup.add(terrainMesh);
 
-    // 四大高山鋪設明顯「登山石板步道」，引導學生輕鬆行上山頂任務點 ②！
     const stepStoneGeo = new THREE.CylinderGeometry(1.1, 1.2, 0.18, 12);
     const stepStoneMat = toyMat(0xF59E0B, 0.5, 0.25);
     [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
@@ -384,7 +383,7 @@
         worldGroup.add(bg);
     });
 
-    /* ── 6. 碰撞解算（建築物、拱橋護欄，四季高山全數開放自由攀登！） ── */
+    /* ── 6. 碰撞解算 ── */
     const colliders = [];
     function addBoxCollider(x, z, rx, rz) { colliders.push({ x, z, rx, rz }); }
 
@@ -454,7 +453,6 @@
     worldGroup.add(hubTower);
     addBoxCollider(0, 0, 6.3, 6.3);
 
-    // 春花溫室 (-42, -42)
     const springHouse = new THREE.Group();
     springHouse.position.set(-42, getTerrainHeight(-42, -42), -42);
     const ghBody = new THREE.Mesh(new THREE.BoxGeometry(8.8, 4.2, 7.0), new THREE.MeshPhysicalMaterial({ color: 0xDCFCE7, roughness: 0.08, clearcoat: 1.0, transparent: true, opacity: 0.76 }));
@@ -465,7 +463,6 @@
     worldGroup.add(springHouse);
     addBoxCollider(-42, -42, 4.8, 3.9);
 
-    // 夏季瞭望塔 (42, -42)
     const summerTower = new THREE.Group();
     summerTower.position.set(42, getTerrainHeight(42, -42), -42);
     const cab = new THREE.Mesh(new THREE.BoxGeometry(5.2, 5.2, 5.2), toyMat(0xFEFCE8, 0.45, 0.25));
@@ -476,7 +473,6 @@
     worldGroup.add(summerTower);
     addBoxCollider(42, -42, 3.0, 3.0);
 
-    // 秋季紅葉穀倉 (-42, 42)
     const autumnBarn = new THREE.Group();
     autumnBarn.position.set(-42, getTerrainHeight(-42, 42), 42);
     const barnBox = new THREE.Mesh(new THREE.BoxGeometry(8.4, 5.2, 9.6), toyMat(0xB91C1C, 0.48, 0.25));
@@ -487,7 +483,6 @@
     worldGroup.add(autumnBarn);
     addBoxCollider(-42, 42, 4.5, 5.1);
 
-    // 冬季冰雪圓頂屋 (42, 42)
     const winterIgloo = new THREE.Group();
     winterIgloo.position.set(42, getTerrainHeight(42, 42), 42);
     const iglooDome = new THREE.Mesh(new THREE.SphereGeometry(5.6, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.52), toyMat(0xFFFFFF, 0.26, 0.7));
@@ -496,7 +491,7 @@
     worldGroup.add(winterIgloo);
     addBoxCollider(42, 42, 5.6, 5.6);
 
-    /* ── 8. 香港特色動植物 3D 生態建模（4 大守護物種 + 8 大本土動植物互動點） ── */
+    /* ── 8. 香港特色動植物 3D 生態建模（近距離才顯示標籤，完成大獎章後自動隱藏任務標籤） ── */
     const guardianNodes = {};
     const animatedButterflies = [];
     let animatedSpoonbillHead = null;
@@ -504,7 +499,6 @@
     let animatedCrabClaw = null;
     let animatedFrog = null;
 
-    // 守護物種金色召喚光柱材質
     const beaconGeo = new THREE.CylinderGeometry(1.8, 2.2, 18, 20, 1, true);
     function buildGuardianBase(gx, gz, labelText, accentHex) {
         const grp = new THREE.Group();
@@ -519,27 +513,26 @@
             color: 0xFACC15, transparent: true, opacity: 0.22, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
         }));
         beacon.position.y = 9.0;
-        beacon.visible = false; // 完成該區 2 個任務點後自動亮起金色光柱！
+        beacon.visible = false;
         grp.add(beacon);
 
-        const lbl = createLabelSprite(labelText, '#0F172A', '#FACC15', 6.2);
-        lbl.position.y = 5.4;
+        const lbl = createLabelSprite(labelText, '#0F172A', '#FACC15', 5.8);
+        lbl.position.y = 5.2;
         grp.add(lbl);
 
         worldGroup.add(grp);
-        return { grp, beacon, ring };
+        return { grp, beacon, ring, lbl };
     }
 
-    // (G1) 🌸 春季守護：香港市花洋紫荊與採蜜鳳蝶 (-55, -32)
+    // (G1) 🌸 春季：洋紫荊與鳳蝶
     {
         const gInfo = HK_GUARDIANS.spring;
-        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🌺 洋紫荊與鳳蝶', 0xEC4899);
+        const { grp, beacon, lbl } = buildGuardianBase(gInfo.x, gInfo.z, '🌺 洋紫荊與鳳蝶', 0xEC4899);
         const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.72, 3.2, 12), toyMat(0x451A03, 0.7, 0.1));
         trunk.position.y = 1.6; trunk.castShadow = true;
         const crown = new THREE.Mesh(new THREE.SphereGeometry(2.3, 16, 14), toyMat(0x15803D, 0.5, 0.2));
         crown.position.y = 3.6; crown.castShadow = true;
         grp.add(trunk, crown);
-        // 盛開五瓣紫紅洋紫荊花朵
         const bauhiniaMat = toyMat(0xDB2777, 0.28, 0.6);
         for (let f = 0; f < 14; f++) {
             const ang = (f / 14) * Math.PI * 2;
@@ -548,47 +541,41 @@
             flower.position.set(Math.cos(ang) * r, 3.0 + (f % 3) * 0.65, Math.sin(ang) * r);
             grp.add(flower);
         }
-        // 3 隻翩翩飛舞的香港藍鳳蝶
         for (let b = 0; b < 3; b++) {
             const bf = new THREE.Group();
-            const wL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.32), toyMat(0x38BDF8, 0.2, 0.8));
-            wL.position.x = -0.2;
-            const wR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.32), toyMat(0xFACC15, 0.2, 0.8));
-            wR.position.x = 0.2;
-            bf.add(wL, wR);
-            grp.add(bf);
+            const wL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.32), toyMat(0x38BDF8, 0.2, 0.8)); wL.position.x = -0.2;
+            const wR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.03, 0.32), toyMat(0xFACC15, 0.2, 0.8)); wR.position.x = 0.2;
+            bf.add(wL, wR); grp.add(bf);
             animatedButterflies.push({ mesh: bf, wL, wR, phase: b * 2.1 });
         }
-        guardianNodes.spring = { data: gInfo, grp, beacon };
+        guardianNodes.spring = { data: gInfo, grp, beacon, lbl };
     }
 
-    // (G2) 🏖️ 夏季守護：南丫島深灣綠海龜 (32, -56)
+    // (G2) 🏖️ 夏季：深灣綠海龜
     {
         const gInfo = HK_GUARDIANS.summer;
-        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🐢 深灣綠海龜', 0x10B981);
+        const { grp, beacon, lbl } = buildGuardianBase(gInfo.x, gInfo.z, '🐢 深灣綠海龜', 0x10B981);
         const shell = new THREE.Mesh(new THREE.SphereGeometry(1.35, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.55), toyMat(0x065F46, 0.32, 0.65));
         shell.scale.set(1.0, 0.72, 1.25); shell.position.y = 0.45; shell.castShadow = true;
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 12), toyMat(0x16A34A, 0.45, 0.3));
         head.position.set(0, 0.65, 1.65);
         [[-1.2, 0.8], [1.2, 0.8], [-1.0, -0.8], [1.0, -0.8]].forEach(([fx, fz]) => {
             const flip = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.14, 0.42), toyMat(0x15803D, 0.45, 0.3));
-            flip.position.set(fx, 0.25, fz);
-            grp.add(flip);
+            flip.position.set(fx, 0.25, fz); grp.add(flip);
         });
-        // 沙灘海龜蛋巢保護區
         for (let e = 0; e < 5; e++) {
             const egg = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), toyMat(0xFEFCE8, 0.4, 0.3));
             egg.position.set(-1.5 + (e % 3) * 0.32, 0.2, -1.4 + Math.floor(e / 3) * 0.32);
             grp.add(egg);
         }
         grp.add(shell, head);
-        guardianNodes.summer = { data: gInfo, grp, beacon };
+        guardianNodes.summer = { data: gInfo, grp, beacon, lbl };
     }
 
-    // (G3) 🦩 秋季守護：米埔濕地黑臉琵鷺 (-29, 56)
+    // (G3) 🦩 秋季：米埔黑臉琵鷺
     {
         const gInfo = HK_GUARDIANS.autumn;
-        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🦩 米埔黑臉琵鷺', 0xF97316);
+        const { grp, beacon, lbl } = buildGuardianBase(gInfo.x, gInfo.z, '🦩 米埔黑臉琵鷺', 0xF97316);
         const whiteFeather = toyMat(0xFFFFFF, 0.35, 0.4);
         const blackBillMat = toyMat(0x0F172A, 0.25, 0.7);
         const body = new THREE.Mesh(new THREE.SphereGeometry(0.82, 16, 14), whiteFeather);
@@ -599,47 +586,39 @@
         });
         const neckPivot = new THREE.Group();
         neckPivot.position.set(0, 2.1, 0.65);
-        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.2, 10), whiteFeather);
-        neck.position.y = 0.55;
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), whiteFeather);
-        head.position.y = 1.18;
-        const blackFace = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), blackBillMat);
-        blackFace.position.set(0, 1.18, 0.16);
-        // 標誌性扁闊湯匙狀「琵琶嘴」
-        const spoonShaft = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.95), blackBillMat);
-        spoonShaft.position.set(0, 1.02, 0.68); spoonShaft.rotation.x = 0.32;
-        const spoonTip = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.05, 14), blackBillMat);
-        spoonTip.position.set(0, 0.87, 1.12); spoonTip.rotation.x = 0.32;
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 1.2, 10), whiteFeather); neck.position.y = 0.55;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 12), whiteFeather); head.position.y = 1.18;
+        const blackFace = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), blackBillMat); blackFace.position.set(0, 1.18, 0.16);
+        const spoonShaft = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, 0.95), blackBillMat); spoonShaft.position.set(0, 1.02, 0.68); spoonShaft.rotation.x = 0.32;
+        const spoonTip = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.05, 14), blackBillMat); spoonTip.position.set(0, 0.87, 1.12); spoonTip.rotation.x = 0.32;
         neckPivot.add(neck, head, blackFace, spoonShaft, spoonTip);
         animatedSpoonbillHead = neckPivot;
         grp.add(body, neckPivot);
-        guardianNodes.autumn = { data: gInfo, grp, beacon };
+        guardianNodes.autumn = { data: gInfo, grp, beacon, lbl };
     }
 
-    // (G4) 🦔 冬季守護：香港中華穿山甲 (56, 30)
+    // (G4) 🦔 冬季：中華穿山甲
     {
         const gInfo = HK_GUARDIANS.winter;
-        const { grp, beacon } = buildGuardianBase(gInfo.x, gInfo.z, '🦔 中華穿山甲', 0x6366F1);
+        const { grp, beacon, lbl } = buildGuardianBase(gInfo.x, gInfo.z, '🦔 中華穿山甲', 0x6366F1);
         const scaleMat = toyMat(0x78350F, 0.38, 0.55, 0.18);
-        // 溫暖岩石樹洞與層疊鱗片穿山甲
         const cave = new THREE.Mesh(new THREE.DodecahedronGeometry(1.7), toyMat(0x475569, 0.8, 0.05));
         cave.scale.set(1.2, 0.85, 1.0); cave.position.set(-0.9, 0.85, -0.8); cave.castShadow = true;
         const pBody = new THREE.Group();
         pBody.position.set(0.45, 0.55, 0.5);
         for (let seg = 0; seg < 5; seg++) {
             const sc = new THREE.Mesh(new THREE.SphereGeometry(0.58 - seg * 0.07, 14, 12), scaleMat);
-            sc.position.z = 0.5 - seg * 0.42;
-            sc.scale.y = 0.82; sc.castShadow = true;
+            sc.position.z = 0.5 - seg * 0.42; sc.scale.y = 0.82; sc.castShadow = true;
             pBody.add(sc);
         }
         const snout = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.65, 12), toyMat(0x92400E, 0.5, 0.2));
         snout.rotation.x = Math.PI / 2; snout.position.set(0, -0.05, 1.05);
         pBody.add(snout);
         grp.add(cave, pBody);
-        guardianNodes.winter = { data: gInfo, grp, beacon };
+        guardianNodes.winter = { data: gInfo, grp, beacon, lbl };
     }
 
-    // 8 個香港本土動植物生態觀察點（盧氏小樹蛙、吊鐘花、中華白海豚、招潮蟹、大欖楓香、大東山芒草、紅耳鵯、山茶花）
+    // 8 個香港本土動植物生態觀察點
     const ambientNodes = [];
     HK_AMBIENT_SPECIES.forEach(sp => {
         const g = new THREE.Group();
@@ -647,81 +626,59 @@
         g.position.set(sp.x, gy, sp.z);
 
         if (sp.id === 'romer_frog') {
-            const leaf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.12, 16), toyMat(0x16A34A, 0.4, 0.4));
-            leaf.position.y = 0.1;
-            const frog = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 12), toyMat(0x854D0E, 0.35, 0.6));
-            frog.scale.set(1.0, 0.8, 1.2); frog.position.y = 0.45;
-            animatedFrog = frog;
-            g.add(leaf, frog);
+            const leaf = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.12, 16), toyMat(0x16A34A, 0.4, 0.4)); leaf.position.y = 0.1;
+            const frog = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 12), toyMat(0x854D0E, 0.35, 0.6)); frog.scale.set(1.0, 0.8, 1.2); frog.position.y = 0.45;
+            animatedFrog = frog; g.add(leaf, frog);
         } else if (sp.id === 'bell_flower') {
-            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.3, 14, 12), toyMat(0x15803D, 0.55, 0.2));
-            bush.position.y = 1.0; g.add(bush);
+            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.3, 14, 12), toyMat(0x15803D, 0.55, 0.2)); bush.position.y = 1.0; g.add(bush);
             for (let b = 0; b < 8; b++) {
                 const bell = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.38, 10), toyMat(0xF472B6, 0.3, 0.6));
                 const a = (b / 8) * Math.PI * 2;
-                bell.position.set(Math.cos(a) * 1.15, 1.1 + (b % 2) * 0.35, Math.sin(a) * 1.15);
-                g.add(bell);
+                bell.position.set(Math.cos(a) * 1.15, 1.1 + (b % 2) * 0.35, Math.sin(a) * 1.15); g.add(bell);
             }
         } else if (sp.id === 'pink_dolphin') {
-            // 中華白海豚（粉紅色立體海豚於水面躍動！）
             const dol = new THREE.Group();
-            const dBody = new THREE.Mesh(new THREE.SphereGeometry(0.65, 16, 12), toyMat(0xFDA4AF, 0.2, 0.9));
-            dBody.scale.set(0.75, 0.8, 2.1);
-            const dBeak = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 10), toyMat(0xFDA4AF, 0.2, 0.9));
-            dBeak.rotation.x = Math.PI / 2; dBeak.position.z = 1.45;
-            const dFin = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.55, 6), toyMat(0xFB7185, 0.2, 0.9));
-            dFin.position.y = 0.62;
-            dol.add(dBody, dBeak, dFin);
-            g.add(dol);
-            animatedDolphin = dol;
+            const dBody = new THREE.Mesh(new THREE.SphereGeometry(0.65, 16, 12), toyMat(0xFDA4AF, 0.2, 0.9)); dBody.scale.set(0.75, 0.8, 2.1);
+            const dBeak = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 10), toyMat(0xFDA4AF, 0.2, 0.9)); dBeak.rotation.x = Math.PI / 2; dBeak.position.z = 1.45;
+            const dFin = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.55, 6), toyMat(0xFB7185, 0.2, 0.9)); dFin.position.y = 0.62;
+            dol.add(dBody, dBeak, dFin); g.add(dol); animatedDolphin = dol;
         } else if (sp.id === 'fiddler_crab') {
-            const cBody = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.42, 0.65), toyMat(0xDC2626, 0.35, 0.6));
-            cBody.position.y = 0.35;
-            const bigClaw = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), toyMat(0xF97316, 0.3, 0.7));
-            bigClaw.scale.set(1.4, 0.85, 0.6); bigClaw.position.set(0.65, 0.55, 0.35);
-            animatedCrabClaw = bigClaw;
-            g.add(cBody, bigClaw);
+            const cBody = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.42, 0.65), toyMat(0xDC2626, 0.35, 0.6)); cBody.position.y = 0.35;
+            const bigClaw = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), toyMat(0xF97316, 0.3, 0.7)); bigClaw.scale.set(1.4, 0.85, 0.6); bigClaw.position.set(0.65, 0.55, 0.35);
+            animatedCrabClaw = bigClaw; g.add(cBody, bigClaw);
         } else if (sp.id === 'sweet_gum') {
-            const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 3.2, 10), toyMat(0x451A03, 0.7, 0.1));
-            tr.position.y = 1.6;
-            const cr = new THREE.Mesh(new THREE.DodecahedronGeometry(2.2), toyMat(0xDC2626, 0.4, 0.35));
-            cr.position.y = 3.8;
+            const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.6, 3.2, 10), toyMat(0x451A03, 0.7, 0.1)); tr.position.y = 1.6;
+            const cr = new THREE.Mesh(new THREE.DodecahedronGeometry(2.2), toyMat(0xDC2626, 0.4, 0.35)); cr.position.y = 3.8;
             g.add(tr, cr);
         } else if (sp.id === 'silvergrass') {
             for (let s = 0; s < 9; s++) {
                 const stalk = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.9, 8), toyMat(0xFDE047, 0.45, 0.3));
-                stalk.position.set((s % 3 - 1) * 0.65, 0.95, (Math.floor(s / 3) - 1) * 0.65);
-                g.add(stalk);
+                stalk.position.set((s % 3 - 1) * 0.65, 0.95, (Math.floor(s / 3) - 1) * 0.65); g.add(stalk);
             }
         } else if (sp.id === 'bulbul') {
-            const perch = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.8, 8), toyMat(0x78350F, 0.7, 0.1));
-            perch.position.y = 0.9;
-            const bird = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 12), toyMat(0x451A03, 0.45, 0.3));
-            bird.position.y = 2.05;
-            const crest = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.52, 8), toyMat(0x0F172A, 0.3, 0.5));
-            crest.position.set(0, 2.55, 0.08);
-            const redCheek = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), toyMat(0xEF4444, 0.3, 0.6));
-            redCheek.position.set(0.32, 2.05, 0.22);
+            const perch = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.8, 8), toyMat(0x78350F, 0.7, 0.1)); perch.position.y = 0.9;
+            const bird = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 12), toyMat(0x451A03, 0.45, 0.3)); bird.position.y = 2.05;
+            const crest = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.52, 8), toyMat(0x0F172A, 0.3, 0.5)); crest.position.set(0, 2.55, 0.08);
+            const redCheek = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), toyMat(0xEF4444, 0.3, 0.6)); redCheek.position.set(0.32, 2.05, 0.22);
             g.add(perch, bird, crest, redCheek);
         } else {
-            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.35, 14, 12), toyMat(0x064E3B, 0.5, 0.25));
-            bush.position.y = 1.0; g.add(bush);
+            const bush = new THREE.Mesh(new THREE.SphereGeometry(1.35, 14, 12), toyMat(0x064E3B, 0.5, 0.25)); bush.position.y = 1.0; g.add(bush);
             for (let c = 0; c < 6; c++) {
                 const cam = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 10), toyMat(0xFFFFFF, 0.25, 0.6));
                 const a = (c / 6) * Math.PI * 2;
-                cam.position.set(Math.cos(a) * 1.15, 1.15, Math.sin(a) * 1.15);
-                g.add(cam);
+                cam.position.set(Math.cos(a) * 1.15, 1.15, Math.sin(a) * 1.15); g.add(cam);
             }
         }
 
-        const lbl = createLabelSprite(`${sp.icon} ${sp.name}`, '#1E293B', '#38BDF8', 4.8);
-        lbl.position.y = 3.6;
+        const lbl = createLabelSprite(`${sp.icon} ${sp.name}`, '#1E293B', '#38BDF8', 4.4);
+        lbl.position.y = 3.5;
+        lbl.visible = false; // 走近時才顯示，保持畫面清爽不雜亂
         g.add(lbl);
         worldGroup.add(g);
-        ambientNodes.push({ data: sp, grp: g, cooldown: 0 });
+        ambientNodes.push({ data: sp, grp: g, lbl, cooldown: 0 });
     });
 
-    /* ── 9. 四季各 2 個固定任務點祭壇 (共 8 個任務台：河畔 ① ＋ 山頂 ②) ── */
+    /* ── 9. 四季各 2 個固定任務點祭壇 ── */
     const missionNodes = [];
     const mColors = { spring: 0xEC4899, summer: 0x0EA5E9, autumn: 0xF97316, winter: 0x6366F1 };
 
@@ -744,8 +701,8 @@
             const orbit = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.1, 10, 26), toyMat(0xFACC15, 0.2, 0.85, 0.5));
             orbit.position.y = 2.3; orbit.rotation.x = Math.PI / 2.3;
 
-            const lbl = createLabelSprite(mCfg.label, '#0F172A', '#38BDF8', 5.4);
-            lbl.position.y = 4.3;
+            const lbl = createLabelSprite(mCfg.label, '#0F172A', '#38BDF8', 5.0);
+            lbl.position.y = 4.2;
 
             grp.add(ped, crystal, orbit, lbl);
             worldGroup.add(grp);
@@ -775,7 +732,6 @@
     const swayTrees = [];
     function spawnTree(x, z, season) {
         if (getRiverInfo(x, z).dist < PHYSICS.RIVER_HALF_W + 3.0) return;
-        // 避開地標、任務點與香港動植物位置
         if (Math.hypot(Math.abs(x) - 42, Math.abs(z) - 42) < 10) return;
         if (Math.hypot(Math.abs(x) - 72, Math.abs(z) - 72) < 8) return;
         for (let i = 0; i < missionNodes.length; i++) {
@@ -784,7 +740,7 @@
         const g = new THREE.Group();
         const tr = new THREE.Mesh(tGeo.trunk, tMat.trunk); tr.position.y = 1.25; tr.castShadow = true;
         const top = new THREE.Mesh(season === 'winter' ? tGeo.pine : tGeo.puff, tMat[season]);
-        top.position.y = season === 'winter' ? 3.2 : 3.2; top.castShadow = true;
+        top.position.y = 3.2; top.castShadow = true;
         g.add(tr, top);
         g.scale.setScalar(0.85 + Math.random() * 0.35);
         g.position.set(x, getTerrainHeight(x, z) - 0.1, z);
@@ -798,7 +754,7 @@
         spawnTree(-rx,  rz, 'autumn'); spawnTree(rx,  rz, 'winter');
     }
 
-    /* ── 11. 深色高對比主角建模（深邃黑髮、暖古銅膚色、深海軍藍探索服、3D 金色導航箭嘴） ── */
+    /* ── 11. 深色高對比主角建模 ── */
     const blobShadowTex = (() => {
         const c = document.createElement('canvas'); c.width = 64; c.height = 64;
         const g = c.getContext('2d');
@@ -817,7 +773,6 @@
     player.position.set(0, getTerrainHeight(0, 14), 14);
     scene.add(player);
 
-    // 深色外框金心腳底光環，任何淺色雪地／沙灘下主角都極度清晰！
     const locatorRing = new THREE.Mesh(
         new THREE.RingGeometry(0.88, 1.16, 32),
         new THREE.MeshBasicMaterial({ color: 0x0F172A, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
@@ -825,15 +780,12 @@
     locatorRing.rotation.x = -Math.PI / 2; locatorRing.position.y = 0.05;
     player.add(locatorRing);
 
-    // 3D 金色導航箭嘴（當完成該季 2 個任務點後亮起，明確指向香港特色動植物！）
     const guideArrow = new THREE.Group();
     guideArrow.position.y = 4.25;
     const arrowShaft = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.22, 1.15), toyMat(0xFACC15, 0.18, 0.9, 0.4));
     arrowShaft.position.z = -0.2;
     const arrowHead = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.95, 4), toyMat(0xEA580C, 0.2, 0.9, 0.3));
-    arrowHead.rotation.x = Math.PI / 2;
-    arrowHead.rotation.y = Math.PI / 4;
-    arrowHead.position.z = 0.78;
+    arrowHead.rotation.x = Math.PI / 2; arrowHead.rotation.y = Math.PI / 4; arrowHead.position.z = 0.78;
     guideArrow.add(arrowShaft, arrowHead);
     guideArrow.visible = false;
     scene.add(guideArrow);
@@ -849,14 +801,13 @@
     player.add(playerVisual);
     const playerShadow = createBlobShadow(2.35);
 
-    // 全面加深主角配色：深藏青藍外套、深酒紅／古銅配件、濃黑頭髮、暖古銅膚色、炭黑長褲與登山靴
-    const coatMat    = toyMat(0x172554, 0.36, 0.4);  // 深藏青探索外套
-    const trimMat    = toyMat(0xD97706, 0.3, 0.55);  // 琥珀金邊飾
-    const hatMat     = toyMat(0x7F1D1D, 0.35, 0.45); // 深酒紅探索帽
-    const hairMat    = toyMat(0x09090B, 0.45, 0.25); // 純濃黑立體髮型
-    const skinMat    = toyMat(0xC67D4B, 0.42, 0.18); // 健康深暖古銅膚色（絕不泛白）
-    const pantsMat   = toyMat(0x090D16, 0.48, 0.2);  // 深炭黑長褲
-    const bootMat    = toyMat(0x27120B, 0.4, 0.45);  // 深咖啡登山靴
+    const coatMat    = toyMat(0x172554, 0.36, 0.4);
+    const trimMat    = toyMat(0xD97706, 0.3, 0.55);
+    const hatMat     = toyMat(0x7F1D1D, 0.35, 0.45);
+    const hairMat    = toyMat(0x09090B, 0.45, 0.25);
+    const skinMat    = toyMat(0xC67D4B, 0.42, 0.18);
+    const pantsMat   = toyMat(0x090D16, 0.48, 0.2);
+    const bootMat    = toyMat(0x27120B, 0.4, 0.45);
     const whiteMat   = toyMat(0xF8FAFC, 0.3, 0.4);
 
     const torsoJacket = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.72, 1.2, 22), coatMat);
@@ -869,10 +820,8 @@
     pufferQuilt.rotation.x = Math.PI / 2; pufferQuilt.position.y = 1.45; pufferQuilt.visible = false;
 
     const winterScarf = new THREE.Group();
-    const scLoop = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.16, 10, 22), trimMat);
-    scLoop.rotation.x = Math.PI / 2; scLoop.position.y = 2.02;
-    const scTail = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.68, 0.12), trimMat);
-    scTail.position.set(0.28, 1.68, 0.6);
+    const scLoop = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.16, 10, 22), trimMat); scLoop.rotation.x = Math.PI / 2; scLoop.position.y = 2.02;
+    const scTail = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.68, 0.12), trimMat); scTail.position.set(0.28, 1.68, 0.6);
     winterScarf.add(scLoop, scTail); winterScarf.visible = false;
 
     const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.6, 0.45, 20), pantsMat);
@@ -880,18 +829,14 @@
 
     const backpackGrp = new THREE.Group();
     backpackGrp.position.set(0, 1.44, -0.6);
-    const packMain = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.9, 0.46), toyMat(0x3B1806, 0.5, 0.25));
-    packMain.castShadow = true;
-    const packFlap = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.28, 0.5), toyMat(0x78350F, 0.4, 0.3));
-    packFlap.position.y = 0.34;
+    const packMain = new THREE.Mesh(new THREE.BoxGeometry(0.84, 0.9, 0.46), toyMat(0x3B1806, 0.5, 0.25)); packMain.castShadow = true;
+    const packFlap = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.28, 0.5), toyMat(0x78350F, 0.4, 0.3)); packFlap.position.y = 0.34;
     backpackGrp.add(packMain, packFlap);
 
     const headGrp = new THREE.Group();
     headGrp.position.y = 2.55;
-    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.68, 22, 18), skinMat);
-    headMesh.castShadow = true;
-    const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.72), hairMat);
-    hairBack.rotation.x = -0.28;
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.68, 22, 18), skinMat); headMesh.castShadow = true;
+    const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.72), hairMat); hairBack.rotation.x = -0.28;
     headGrp.add(headMesh, hairBack);
     [-0.25, 0, 0.25].forEach((bx, idx) => {
         const bang = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.38, 8), hairMat);
@@ -902,21 +847,15 @@
 
     const eyeBlackMat = toyMat(0x09090B, 0.08, 1.0);
     [-0.24, 0.24].forEach(ex => {
-        const ew = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), whiteMat);
-        ew.scale.set(1.0, 1.2, 0.55); ew.position.set(ex, 0.03, 0.59);
-        const ep = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 10), eyeBlackMat);
-        ep.scale.y = 1.25; ep.position.set(ex, 0.03, 0.64);
-        const brow = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.065, 0.06), hairMat);
-        brow.position.set(ex, 0.24, 0.62);
+        const ew = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), whiteMat); ew.scale.set(1.0, 1.2, 0.55); ew.position.set(ex, 0.03, 0.59);
+        const ep = new THREE.Mesh(new THREE.SphereGeometry(0.095, 10, 10), eyeBlackMat); ep.scale.y = 1.25; ep.position.set(ex, 0.03, 0.64);
+        const brow = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.065, 0.06), hairMat); brow.position.set(ex, 0.24, 0.62);
         headGrp.add(ew, ep, brow);
     });
 
-    // 4 款深色系天氣帽飾
     const capGroup = new THREE.Group();
-    const capDome = new THREE.Mesh(new THREE.SphereGeometry(0.74, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), hatMat);
-    capDome.position.y = 0.08;
-    const capBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.79, 0.09, 18, 1, false, -Math.PI * 0.42, Math.PI * 0.84), hatMat);
-    capBrim.position.set(0, 0.12, 0.28);
+    const capDome = new THREE.Mesh(new THREE.SphereGeometry(0.74, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), hatMat); capDome.position.y = 0.08;
+    const capBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.79, 0.09, 18, 1, false, -Math.PI * 0.42, Math.PI * 0.84), hatMat); capBrim.position.set(0, 0.12, 0.28);
     capGroup.add(capDome, capBrim);
 
     const sunHatGroup = new THREE.Group();
@@ -925,8 +864,7 @@
     sunHatGroup.add(shTop, shBrim); sunHatGroup.visible = false;
 
     const rainHoodGroup = new THREE.Group();
-    const rhShell = new THREE.Mesh(new THREE.SphereGeometry(0.78, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.68), hatMat);
-    rhShell.rotation.x = -0.22; rhShell.position.y = 0.04;
+    const rhShell = new THREE.Mesh(new THREE.SphereGeometry(0.78, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.68), hatMat); rhShell.rotation.x = -0.22; rhShell.position.y = 0.04;
     rainHoodGroup.add(rhShell); rainHoodGroup.visible = false;
 
     const beanieGroup = new THREE.Group();
@@ -944,8 +882,7 @@
     headGrp.add(gearGlasses);
 
     const gearCrown = new THREE.Group();
-    const crBand = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.42, 0.36, 16), toyMat(0xFACC15, 0.18, 0.9, 0.7));
-    crBand.position.y = 0.92;
+    const crBand = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.42, 0.36, 16), toyMat(0xFACC15, 0.18, 0.9, 0.7)); crBand.position.y = 0.92;
     gearCrown.add(crBand); gearCrown.visible = false;
     headGrp.add(gearCrown);
 
@@ -957,24 +894,18 @@
         const slv = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.18, 0.46, 12), coatMat); slv.position.y = -0.19; slv.castShadow = true;
         const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.14, 0.34, 12), skinMat); arm.position.y = -0.48;
         const hnd = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 10), skinMat); hnd.position.y = -0.68;
-        pivot.add(slv, arm, hnd);
-        return pivot;
+        pivot.add(slv, arm, hnd); return pivot;
     }
     function makeLeg(side) {
         const pivot = new THREE.Group(); pivot.position.set(side * 0.31, 0.72, 0);
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.17, 0.54, 12), pantsMat); leg.position.y = -0.26; leg.castShadow = true;
-        const boot = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), bootMat);
-        boot.scale.set(0.96, 0.76, 1.38); boot.position.set(0, -0.55, 0.09); boot.castShadow = true;
-        pivot.add(leg, boot);
-        return pivot;
+        const boot = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), bootMat); boot.scale.set(0.96, 0.76, 1.38); boot.position.set(0, -0.55, 0.09); boot.castShadow = true;
+        pivot.add(leg, boot); return pivot;
     }
     const leftArm = makeArm(-1), rightArm = makeArm(1);
     const leftLeg = makeLeg(-1), rightLeg = makeLeg(1);
 
-    // 3D 手提物品掛載點
-    const propSocket = new THREE.Group();
-    propSocket.position.set(0, -0.68, 0.12);
-    rightArm.add(propSocket);
+    const propSocket = new THREE.Group(); propSocket.position.set(0, -0.68, 0.12); rightArm.add(propSocket);
     const propsMap = {};
 
     const pMag = new THREE.Group();
@@ -1010,13 +941,11 @@
     propsMap.binoculars = pBino;
 
     const pTherm = new THREE.Group();
-    const thB = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.68, 14), toyMat(0x991B1B, 0.25, 0.85));
-    thB.position.set(0, 0.15, 0.32); pTherm.add(thB);
-    propsMap.thermos = pTherm;
+    const thB = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 0.68, 14), toyMat(0x991B1B, 0.25, 0.85)); thB.position.set(0, 0.15, 0.32);
+    pTherm.add(thB); propsMap.thermos = pTherm;
 
     const pLant = new THREE.Group();
-    const lnC = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.4, 12), new THREE.MeshBasicMaterial({ color: 0xFEF08A }));
-    lnC.position.set(0, -0.35, 0.35);
+    const lnC = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.18, 0.4, 12), new THREE.MeshBasicMaterial({ color: 0xFEF08A })); lnC.position.set(0, -0.35, 0.35);
     const lnLight = new THREE.PointLight(0xFBBF24, 1.3, 12, 2); lnLight.position.set(0, -0.35, 0.5);
     pLant.add(lnC, lnLight); propsMap.lantern = pLant;
 
@@ -1043,7 +972,7 @@
         Object.keys(propsMap).forEach(k => { propsMap[k].visible = (k === activePropKey); });
     }
 
-    /* ── 12. 4 隻百厭小猴子（額外趣味科學挑戰，答對送香蕉加速衝刺！） ── */
+    /* ── 12. 4 隻百厭小猴子 ── */
     const monkeys = [];
     const furMat = toyMat(0x78350F, 0.55, 0.2);
     const faceMat = toyMat(0xFDE68A, 0.48, 0.2);
@@ -1054,12 +983,9 @@
         { season: 'winter', xMin:  16, xMax:  68, zMin:  16, zMax:  68, sx:  25, sz:  24 }
     ].forEach(z => {
         const mg = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 14, 12), furMat);
-        body.scale.y = 1.15; body.position.y = 1.0; body.castShadow = true;
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.54, 14, 12), furMat);
-        head.position.y = 1.95; head.castShadow = true;
-        const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), faceMat);
-        muzzle.position.set(0, 1.88, 0.4);
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 14, 12), furMat); body.scale.y = 1.15; body.position.y = 1.0; body.castShadow = true;
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.54, 14, 12), furMat); head.position.y = 1.95; head.castShadow = true;
+        const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), faceMat); muzzle.position.set(0, 1.88, 0.4);
         mg.add(body, head, muzzle);
         mg.position.set(z.sx, getTerrainHeight(z.sx, z.sz), z.sz);
         scene.add(mg);
@@ -1116,21 +1042,14 @@
                 const flap = Math.sin(elapsed * 16 + idx) * 0.65;
                 bf.wL.rotation.z = flap; bf.wR.rotation.z = -flap;
             });
-            if (animatedSpoonbillHead) {
-                animatedSpoonbillHead.rotation.y = Math.sin(elapsed * 2.4) * 0.55;
-            }
+            if (animatedSpoonbillHead) animatedSpoonbillHead.rotation.y = Math.sin(elapsed * 2.4) * 0.55;
             if (animatedDolphin) {
-                const jumpPhase = (elapsed * 1.6) % (Math.PI * 2);
-                const h = Math.max(0, Math.sin(jumpPhase)) * 2.6;
-                animatedDolphin.position.y = -0.35 + h;
-                animatedDolphin.rotation.x = -Math.cos(jumpPhase) * 0.55;
+                const jp = (elapsed * 1.6) % (Math.PI * 2);
+                animatedDolphin.position.y = -0.35 + Math.max(0, Math.sin(jp)) * 2.6;
+                animatedDolphin.rotation.x = -Math.cos(jp) * 0.55;
             }
-            if (animatedCrabClaw) {
-                animatedCrabClaw.position.y = 0.55 + Math.abs(Math.sin(elapsed * 5.0)) * 0.25;
-            }
-            if (animatedFrog) {
-                animatedFrog.position.y = 0.45 + Math.max(0, Math.sin(elapsed * 4.5)) * 0.45;
-            }
+            if (animatedCrabClaw) animatedCrabClaw.position.y = 0.55 + Math.abs(Math.sin(elapsed * 5.0)) * 0.25;
+            if (animatedFrog) animatedFrog.position.y = 0.45 + Math.max(0, Math.sin(elapsed * 4.5)) * 0.45;
         },
         weatherPoints, pSeeds, PARTICLE_COUNT, P_MODES,
         setHighQuality(hq) {
